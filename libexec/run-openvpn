@@ -48,12 +48,18 @@ port=$(getv OPENVPN_PORT)
 proto=$(getv OPENVPN_PROTO)
 network=$(getv OPENVPN_NETWORK)
 max_clients=$(getv OPENVPN_MAX_CLIENTS)
+full_tunnel=$(getv OPENVPN_FULL_TUNNEL)
+push_dns1=$(getv OPENVPN_PUSH_DNS1)
+push_dns2=$(getv OPENVPN_PUSH_DNS2)
 
 valid_ipv4 "$bind" || { echo "OPENVPN_BIND inválido." >&2; exit 1; }
 valid_port "$port" || { echo "OPENVPN_PORT inválido." >&2; exit 1; }
 [[ "$proto" == tcp || "$proto" == udp ]] || { echo "OPENVPN_PROTO deve ser tcp ou udp." >&2; exit 1; }
 valid_private_24 "$network" || { echo "OPENVPN_NETWORK deve ser rede privada RFC1918 /24 terminada em .0." >&2; exit 1; }
 valid_uint "$max_clients" && (( 10#$max_clients >= 1 && 10#$max_clients <= 250 )) || { echo "OPENVPN_MAX_CLIENTS inválido (1..250)." >&2; exit 1; }
+[[ "$full_tunnel" == yes || "$full_tunnel" == no ]] || { echo "OPENVPN_FULL_TUNNEL deve ser yes/no." >&2; exit 1; }
+[[ -z "$push_dns1" ]] || valid_ipv4 "$push_dns1" || { echo "OPENVPN_PUSH_DNS1 inválido." >&2; exit 1; }
+[[ -z "$push_dns2" ]] || valid_ipv4 "$push_dns2" || { echo "OPENVPN_PUSH_DNS2 inválido." >&2; exit 1; }
 
 plugin=$(find /usr/lib -type f -name 'openvpn-plugin-auth-pam.so' -print -quit 2>/dev/null || true)
 [[ -n "$plugin" && -r "$plugin" ]] || { echo "Plugin PAM do OpenVPN não encontrado." >&2; exit 1; }
@@ -99,5 +105,11 @@ management-client-group root
 verb 3
 mute 10
 EOF2
+
+if [[ "$full_tunnel" == yes ]]; then
+  printf 'push "redirect-gateway def1 bypass-dhcp"\n' >> "$RUNTIME_CONF"
+  [[ -z "$push_dns1" ]] || printf 'push "dhcp-option DNS %s"\n' "$push_dns1" >> "$RUNTIME_CONF"
+  [[ -z "$push_dns2" ]] || printf 'push "dhcp-option DNS %s"\n' "$push_dns2" >> "$RUNTIME_CONF"
+fi
 
 exec /usr/sbin/openvpn --config "$RUNTIME_CONF"

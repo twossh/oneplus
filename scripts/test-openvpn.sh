@@ -20,7 +20,9 @@ grep -Fq 'verify-client-cert none' "$ROOT_DIR/libexec/run-openvpn" || fail 'veri
 grep -Fq 'username-as-common-name' "$ROOT_DIR/libexec/run-openvpn" || fail 'username-as-common-name ausente.'
 grep -Fq 'plugin ${plugin} oneplus-openvpn' "$ROOT_DIR/libexec/run-openvpn" || fail 'Plugin PAM ausente.'
 ! grep -Fq 'duplicate-cn' "$ROOT_DIR/libexec/run-openvpn" || fail 'duplicate-cn não deve ser usado.'
-! grep -Fq 'redirect-gateway' "$ROOT_DIR/libexec/run-openvpn" || fail 'OpenVPN não deve ativar full-tunnel/NAT nesta fase.'
+grep -Fq 'if [[ "$full_tunnel" == yes ]]' "$ROOT_DIR/libexec/run-openvpn" || fail 'Full-tunnel precisa ser condicional.'
+grep -Fq 'redirect-gateway def1 bypass-dhcp' "$ROOT_DIR/libexec/run-openvpn" || fail 'Push full-tunnel opcional ausente.'
+! grep -Eq 'nft[[:space:]]|iptables|masquerade' "$ROOT_DIR/libexec/run-openvpn" || fail 'OpenVPN não deve manipular firewall diretamente.'
 ! grep -Fq 'cat "$OPENVPN_CA_KEY"' "$ROOT_DIR/modules/openvpn.sh" || fail 'Chave privada da CA não pode ser exportada.'
 
 echo 'OPENVPN TESTS: OK'

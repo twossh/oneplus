@@ -22,7 +22,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 # Dropbear e stunnel ficam no componente Universe em Ubuntu. Imagens mínimas
 # podem não trazê-lo habilitado, então fazemos um fallback controlado.
-if ! apt-cache show dropbear-bin >/dev/null 2>&1 || ! apt-cache show stunnel4 >/dev/null 2>&1 || ! apt-cache show sslh >/dev/null 2>&1; then
+if ! apt-cache show dropbear-bin >/dev/null 2>&1 || ! apt-cache show stunnel4 >/dev/null 2>&1 || ! apt-cache show sslh >/dev/null 2>&1 || ! apt-cache show age >/dev/null 2>&1 || ! apt-cache show minisign >/dev/null 2>&1; then
   apt-get install -y --no-install-recommends software-properties-common
   add-apt-repository -y universe
   apt-get update
@@ -31,7 +31,7 @@ apt-get install -y --no-install-recommends \
   ca-certificates curl git build-essential \
   openssh-server dropbear-bin stunnel4 openvpn sslh python3 \
   iproute2 procps util-linux passwd libpam-modules openssl \
-  rsync dnsutils lsof less
+  rsync dnsutils lsof less nftables age minisign
 
 info "Validando componentes Python após instalar dependências..."
 PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/oneplus-install-pycache.$$" python3 -m py_compile \
@@ -45,7 +45,7 @@ else
   apt-get install -y --no-install-recommends golang-go
 fi
 
-install -d -m 0755 /opt/oneplus /usr/local/lib/oneplus/bin /etc/oneplus /var/lib/oneplus
+install -d -m 0755 /opt/oneplus /usr/local/lib/oneplus/bin /etc/oneplus /var/lib/oneplus /var/log/oneplus
 install -d -m 0700 /var/lib/oneplus/users
 install -d -m 0700 -o root -g root /etc/oneplus/dropbear
 install -d -m 0700 -o root -g root /etc/oneplus/openvpn /etc/oneplus/openvpn/pki
@@ -88,6 +88,7 @@ fi
 [[ -e /etc/oneplus/tls.env ]] || install -m 0640 -o root -g oneplus-tls /opt/oneplus/defaults/tls.env /etc/oneplus/tls.env
 [[ -e /etc/oneplus/openvpn.env ]] || install -m 0640 -o root -g root /opt/oneplus/defaults/openvpn.env /etc/oneplus/openvpn.env
 [[ -e /etc/oneplus/mux.env ]] || install -m 0640 -o root -g oneplus-mux /opt/oneplus/defaults/mux.env /etc/oneplus/mux.env
+[[ -e /etc/oneplus/firewall.env ]] || install -m 0640 -o root -g root /opt/oneplus/defaults/firewall.env /etc/oneplus/firewall.env
 chown root:root /etc/oneplus/oneplus.conf && chmod 0644 /etc/oneplus/oneplus.conf
 chown root:oneplus-badvpn /etc/oneplus/badvpn.env && chmod 0640 /etc/oneplus/badvpn.env
 chown root:oneplus-dnstt /etc/oneplus/slowdns.env && chmod 0640 /etc/oneplus/slowdns.env
@@ -97,6 +98,17 @@ chown root:oneplus-ws /etc/oneplus/websocket.env && chmod 0640 /etc/oneplus/webs
 chown root:oneplus-tls /etc/oneplus/tls.env && chmod 0640 /etc/oneplus/tls.env
 chown root:root /etc/oneplus/openvpn.env && chmod 0640 /etc/oneplus/openvpn.env
 chown root:oneplus-mux /etc/oneplus/mux.env && chmod 0640 /etc/oneplus/mux.env
+chown root:root /etc/oneplus/firewall.env && chmod 0640 /etc/oneplus/firewall.env
+
+ensure_env_key() {
+  local file="$1" key="$2" value="$3"
+  grep -Eq "^${key}=" "$file" 2>/dev/null && return 0
+  printf '%s=%s\n' "$key" "$value" >> "$file"
+}
+# Migração v0.4.x -> v0.5.x sem sobrescrever escolhas existentes.
+ensure_env_key /etc/oneplus/openvpn.env OPENVPN_FULL_TUNNEL no
+ensure_env_key /etc/oneplus/openvpn.env OPENVPN_PUSH_DNS1 ""
+ensure_env_key /etc/oneplus/openvpn.env OPENVPN_PUSH_DNS2 ""
 install -d -m 0750 -o root -g oneplus-dnstt /etc/oneplus/slowdns
 install -d -m 0750 -o root -g oneplus-tls /etc/oneplus/tls
 install -d -m 0700 -o root -g root /etc/oneplus/openvpn /etc/oneplus/openvpn/pki
@@ -110,6 +122,7 @@ install -m 0644 /opt/oneplus/systemd/oneplus-websocket.service /etc/systemd/syst
 install -m 0644 /opt/oneplus/systemd/oneplus-tls.service /etc/systemd/system/oneplus-tls.service
 install -m 0644 /opt/oneplus/systemd/oneplus-openvpn.service /etc/systemd/system/oneplus-openvpn.service
 install -m 0644 /opt/oneplus/systemd/oneplus-mux.service /etc/systemd/system/oneplus-mux.service
+install -m 0644 /opt/oneplus/systemd/oneplus-firewall.service /etc/systemd/system/oneplus-firewall.service
 ln -sfn /opt/oneplus/bin/oneplus /usr/local/bin/oneplus
 
 if command -v systemd-analyze >/dev/null 2>&1; then
@@ -123,7 +136,8 @@ if command -v systemd-analyze >/dev/null 2>&1; then
     /etc/systemd/system/oneplus-websocket.service \
     /etc/systemd/system/oneplus-tls.service \
     /etc/systemd/system/oneplus-openvpn.service \
-    /etc/systemd/system/oneplus-mux.service
+    /etc/systemd/system/oneplus-mux.service \
+    /etc/systemd/system/oneplus-firewall.service
 fi
 systemctl daemon-reload
 /opt/oneplus/modules/users.sh init
@@ -152,5 +166,5 @@ systemctl enable --now oneplus-user-maintenance.timer
 printf "\n%bInstalação concluída.%b\n" "$C_GREEN" "$C_RESET"
 printf "Execute: %boneplus%b\n" "$C_BOLD" "$C_RESET"
 printf "Verifique: %boneplus --check%b\n" "$C_BOLD" "$C_RESET"
-printf "Dropbear, WebSocket, TLS, OpenVPN, Multiplexador, BadVPN e SlowDNS permanecem desabilitados até serem configurados no menu.\n"
+printf "Dropbear, WebSocket, TLS, OpenVPN, Multiplexador, Firewall/NAT, BadVPN e SlowDNS permanecem desabilitados até serem configurados no menu.\n"
 printf "A manutenção segura de expiração/limites de usuários está ativa via systemd timer.\n"

@@ -8,12 +8,12 @@ fail() { printf '[ERRO] %s\n' "$*" >&2; FAILED=1; }
 ok()   { printf '[OK] %s\n' "$*"; }
 
 required=(
-  VERSION README.md CHANGELOG.md setup.sh install.sh uninstall.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh
+  VERSION README.md CHANGELOG.md setup.sh install.sh uninstall.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-operations.sh scripts/release-sign.sh
   bin/oneplus lib/common.sh lib/os.sh
-  modules/system.sh modules/ssh.sh modules/dropbear.sh modules/websocket.sh modules/tls.sh modules/openvpn.sh modules/mux.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh
-  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-mux libexec/websocket_proxy.py libexec/openvpn_manager.py
-  defaults/oneplus.conf defaults/badvpn.env defaults/slowdns.env defaults/users.conf defaults/dropbear.env defaults/websocket.env defaults/tls.env defaults/openvpn.env defaults/mux.env
-  systemd/oneplus-badvpn.service systemd/oneplus-slowdns.service systemd/oneplus-dropbear.service systemd/oneplus-websocket.service systemd/oneplus-tls.service systemd/oneplus-openvpn.service systemd/oneplus-mux.service
+  modules/system.sh modules/ssh.sh modules/dropbear.sh modules/websocket.sh modules/tls.sh modules/openvpn.sh modules/mux.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh modules/firewall.sh modules/backup.sh modules/reports.sh modules/diagnostics.sh modules/update.sh
+  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-mux libexec/run-firewall libexec/websocket_proxy.py libexec/openvpn_manager.py
+  defaults/oneplus.conf defaults/badvpn.env defaults/slowdns.env defaults/users.conf defaults/dropbear.env defaults/websocket.env defaults/tls.env defaults/openvpn.env defaults/mux.env defaults/firewall.env
+  systemd/oneplus-badvpn.service systemd/oneplus-slowdns.service systemd/oneplus-dropbear.service systemd/oneplus-websocket.service systemd/oneplus-tls.service systemd/oneplus-openvpn.service systemd/oneplus-mux.service systemd/oneplus-firewall.service
   systemd/oneplus-user-maintenance.service systemd/oneplus-user-maintenance.timer
   scripts/test-websocket.py
 )
@@ -30,7 +30,7 @@ mapfile -t shell_files < <(
   {
     find "$ROOT_DIR" -type f -name '*.sh' -not -path '*/.git/*' -print
     printf '%s\n' "$ROOT_DIR/bin/oneplus" "$ROOT_DIR/libexec/run-badvpn" "$ROOT_DIR/libexec/run-slowdns" "$ROOT_DIR/libexec/run-user-maintenance" \
-      "$ROOT_DIR/libexec/run-dropbear" "$ROOT_DIR/libexec/run-websocket" "$ROOT_DIR/libexec/run-tls" "$ROOT_DIR/libexec/run-openvpn" "$ROOT_DIR/libexec/run-mux"
+      "$ROOT_DIR/libexec/run-dropbear" "$ROOT_DIR/libexec/run-websocket" "$ROOT_DIR/libexec/run-tls" "$ROOT_DIR/libexec/run-openvpn" "$ROOT_DIR/libexec/run-mux" "$ROOT_DIR/libexec/run-firewall"
   } | sort -u
 )
 
@@ -46,9 +46,9 @@ done
 (( FAILED == 0 )) && ok "Sintaxe Bash e finais de linha validados."
 
 executables=(setup.sh install.sh uninstall.sh bin/oneplus lib/common.sh lib/os.sh \
-  modules/system.sh modules/ssh.sh modules/dropbear.sh modules/websocket.sh modules/tls.sh modules/openvpn.sh modules/mux.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh \
-  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-mux libexec/websocket_proxy.py libexec/openvpn_manager.py \
-  scripts/validate.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-websocket.py)
+  modules/system.sh modules/ssh.sh modules/dropbear.sh modules/websocket.sh modules/tls.sh modules/openvpn.sh modules/mux.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh modules/firewall.sh modules/backup.sh modules/reports.sh modules/diagnostics.sh modules/update.sh \
+  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-mux libexec/run-firewall libexec/websocket_proxy.py libexec/openvpn_manager.py \
+  scripts/validate.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-operations.sh scripts/release-sign.sh scripts/test-websocket.py)
 for rel in "${executables[@]}"; do
   [[ -x "$ROOT_DIR/$rel" ]] || fail "Permissão executável ausente: $rel"
 done
@@ -63,7 +63,7 @@ forbidden_regex=(
   'chmod[[:space:]]+(-R[[:space:]]+)?777([[:space:]]|$)'
 )
 for re in "${forbidden_regex[@]}"; do
-  if grep -RInE --exclude-dir=.git --exclude='validate.sh' "$re" "$ROOT_DIR" >/tmp/oneplus-validate-match.$$ 2>/dev/null; then
+  if grep -RInE --exclude-dir=.git --exclude='validate.sh' --exclude='*.md' "$re" "$ROOT_DIR" >/tmp/oneplus-validate-match.$$ 2>/dev/null; then
     cat /tmp/oneplus-validate-match.$$ >&2
     fail "Padrão destrutivo proibido encontrado."
   fi
@@ -144,10 +144,15 @@ fi
 if grep -Fq 'client-cert-not-required' "$ROOT_DIR/libexec/run-openvpn" || grep -Fq 'duplicate-cn' "$ROOT_DIR/libexec/run-openvpn"; then
   fail "OpenVPN contém opção removida/incompatível ou duplicate-cn."
 fi
-if grep -RIn --exclude='validate.sh' -E '(^|[[:space:]])redirect-gateway([[:space:]]|$)|MASQUERADE|nft[[:space:]].*masquerade' "$ROOT_DIR/modules/openvpn.sh" "$ROOT_DIR/libexec/run-openvpn" >/dev/null 2>&1; then
-  fail "OpenVPN da fase 3 não deve alterar NAT/full-tunnel automaticamente."
+if grep -RIn --exclude='validate.sh' -E 'MASQUERADE|nft[[:space:]].*masquerade|iptables' "$ROOT_DIR/modules/openvpn.sh" "$ROOT_DIR/libexec/run-openvpn" >/dev/null 2>&1; then
+  fail "OpenVPN não pode manipular NAT/firewall diretamente; isso pertence ao módulo firewall."
 else
-  ok "OpenVPN não altera NAT/firewall automaticamente."
+  ok "OpenVPN não manipula firewall diretamente."
+fi
+if ! grep -Fq 'if [[ "$full_tunnel" == yes ]]' "$ROOT_DIR/libexec/run-openvpn" ||    ! grep -Fq 'redirect-gateway def1 bypass-dhcp' "$ROOT_DIR/libexec/run-openvpn"; then
+  fail "Full-tunnel OpenVPN deve ser opcional e condicionado por OPENVPN_FULL_TUNNEL."
+else
+  ok "Full-tunnel OpenVPN é opcional e controlado pelo administrador."
 fi
 if ! grep -Fq 'user ingroup oneplus-users' "$ROOT_DIR/modules/openvpn.sh" || \
    ! grep -Fq 'user != root' "$ROOT_DIR/modules/openvpn.sh"; then
@@ -204,6 +209,40 @@ if ! grep -Fq '[[ "$SLOWDNS_PRIVKEY" == "$EXPECTED_KEY" ]]' "$ROOT_DIR/libexec/r
   fail "Wrapper SlowDNS deve restringir a chave privada ao caminho protegido OnePlus."
 else
   ok "Caminho da chave privada SlowDNS está restrito."
+fi
+
+
+# Fase 4: firewall isolado, backup criptografado e atualização assinada.
+if ! grep -Fq 'table inet oneplus_filter' "$ROOT_DIR/libexec/run-firewall" ||    ! grep -Fq 'table ip oneplus_nat' "$ROOT_DIR/libexec/run-firewall"; then
+  fail "Firewall deve usar tabelas nftables exclusivas do OnePlus."
+else
+  ok "Firewall usa tabelas nftables próprias."
+fi
+if grep -Eq 'flush[[:space:]]+ruleset|delete[[:space:]]+table[[:space:]]+(inet|ip)[[:space:]]+(filter|nat)([[:space:]]|$)' "$ROOT_DIR/libexec/run-firewall"; then
+  fail "Firewall OnePlus não pode limpar/substituir tabelas globais."
+else
+  ok "Firewall não limpa ruleset/tabelas globais."
+fi
+if ! grep -Fq 'masquerade comment "oneplus openvpn nat"' "$ROOT_DIR/libexec/run-firewall"; then
+  fail "NAT OpenVPN isolado não encontrado."
+fi
+if ! grep -Fq 'age -p -o "$outfile"' "$ROOT_DIR/modules/backup.sh" ||    grep -Fq 'backup_copy_if_exists /etc/shadow' "$ROOT_DIR/modules/backup.sh"; then
+  fail "Backup deve ser criptografado com age e não copiar /etc/shadow integralmente."
+else
+  ok "Backup é criptografado e captura apenas contas OnePlus."
+fi
+if ! grep -Fq 'minisign -Vm' "$ROOT_DIR/modules/update.sh" ||    ! grep -Fq 'sha256sum -c release/SHA256SUMS' "$ROOT_DIR/modules/update.sh"; then
+  fail "Atualizador deve verificar assinatura minisign e manifesto SHA-256."
+else
+  ok "Atualizador estável verifica minisign + SHA-256."
+fi
+if find "$ROOT_DIR" -type f \( -name 'minisign.key' -o -name '*.sec' -o -name '*secret*key*' \) | grep -q .; then
+  fail "Chave secreta de release não pode entrar no repositório."
+else
+  ok "Nenhuma chave secreta de release encontrada."
+fi
+if ! grep -Fq 'CapabilityBoundingSet=CAP_NET_ADMIN' "$ROOT_DIR/systemd/oneplus-firewall.service"; then
+  fail "Serviço nftables deve limitar capabilities a CAP_NET_ADMIN."
 fi
 
 # Proteções obrigatórias do módulo de usuários.

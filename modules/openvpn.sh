@@ -136,7 +136,7 @@ configure_openvpn() {
   generate_openvpn_pki || return 1
 
   local bind="127.0.0.1" port="1194" proto="tcp" public_host="" public_port="443"
-  local network="10.8.0.0" max_clients="128" v tmp old_conf had_old=0 was_active=0
+  local network="10.8.0.0" max_clients="128" full_tunnel="no" push_dns1="" push_dns2="" v tmp old_conf had_old=0 was_active=0
   [[ -r "$OPENVPN_CONF" ]] && {
     bind=$(read_openvpn_value OPENVPN_BIND); bind=${bind:-127.0.0.1}
     port=$(read_openvpn_value OPENVPN_PORT); port=${port:-1194}
@@ -145,6 +145,9 @@ configure_openvpn() {
     public_port=$(read_openvpn_value OPENVPN_PUBLIC_PORT); public_port=${public_port:-443}
     network=$(read_openvpn_value OPENVPN_NETWORK); network=${network:-10.8.0.0}
     max_clients=$(read_openvpn_value OPENVPN_MAX_CLIENTS); max_clients=${max_clients:-128}
+    full_tunnel=$(read_openvpn_value OPENVPN_FULL_TUNNEL); full_tunnel=${full_tunnel:-no}
+    push_dns1=$(read_openvpn_value OPENVPN_PUSH_DNS1)
+    push_dns2=$(read_openvpn_value OPENVPN_PUSH_DNS2)
   }
 
   printf "IPv4 de escuta OpenVPN [%s]: " "$bind"; read -r v; bind=${v:-$bind}
@@ -171,7 +174,7 @@ configure_openvpn() {
 
   warn "O OpenVPN autentica somente contas do grupo oneplus-users via PAM; senhas não são armazenadas pelo OnePlus."
   warn "O perfil atual usa usuário/senha sem certificado cliente individual. É mais simples para as contas OnePlus, mas oferece menos proteção de identidade do cliente do que mTLS com certificado por dispositivo."
-  warn "Esta fase NÃO cria NAT/masquerade nem altera firewall. A VPN fornece o túnel e a rede privada; roteamento de Internet será opcional na fase de firewall."
+  info "NAT/full-tunnel é gerenciado separadamente em OnePlus > Portas / Firewall / NAT; este menu não altera firewall."
   if [[ "$bind" == 127.0.0.1 ]]; then
     info "Bind loopback selecionado: ideal para publicar OpenVPN através do multiplexador sslh."
   else
@@ -199,6 +202,9 @@ OPENVPN_PUBLIC_HOST=${public_host}
 OPENVPN_PUBLIC_PORT=${public_port}
 OPENVPN_NETWORK=${network}
 OPENVPN_MAX_CLIENTS=${max_clients}
+OPENVPN_FULL_TUNNEL=${full_tunnel}
+OPENVPN_PUSH_DNS1=${push_dns1}
+OPENVPN_PUSH_DNS2=${push_dns2}
 EOF2
   install -m 0640 -o root -g root "$tmp" "$OPENVPN_CONF"
   rm -f "$tmp"
@@ -280,6 +286,7 @@ show_openvpn_status() {
     printf "Escuta: %s:%s/%s\n" "$(read_openvpn_value OPENVPN_BIND)" "$(read_openvpn_value OPENVPN_PORT)" "$(read_openvpn_value OPENVPN_PROTO)"
     printf "Público: %s:%s\n" "$(read_openvpn_value OPENVPN_PUBLIC_HOST)" "$(read_openvpn_value OPENVPN_PUBLIC_PORT)"
     printf "Rede: %s/24\n" "$(read_openvpn_value OPENVPN_NETWORK)"
+    printf "Full tunnel: %s\n" "$(read_openvpn_value OPENVPN_FULL_TUNNEL)"
   fi
   printf "PKI: %s\n" "$([[ -s "$OPENVPN_SERVER_CERT" ]] && echo instalada || echo ausente)"
   if [[ -S "$OPENVPN_MGMT" ]]; then

@@ -1,212 +1,194 @@
-# OnePlus v0.4.0
+# OnePlus v0.5.0
 
-Gerenciador CLI de usuários e serviços SSH/VPN para Ubuntu 24.04 ou superior, criado do zero para administração exclusivamente pelo terminal.
+Gerenciador CLI de usuários, SSH, VPN e serviços de conectividade para Ubuntu 24.04 ou superior, administrado exclusivamente pelo terminal.
 
-O OnePlus não instala painel web, não substitui o `sshd_config` completo, não armazena senhas de usuários em texto puro, não apaga `crontab` e não limpa regras globais de firewall.
+O OnePlus é código novo. Não substitui o `sshd_config` completo, não armazena senhas em texto puro, não apaga `crontab`, não executa `iptables -F` e não executa `nft flush ruleset`.
 
 ## Instalação direta pelo GitHub
 
-Repositório oficial:
+Repositório oficial: `https://github.com/twossh/oneplus`
 
-`https://github.com/twossh/oneplus`
-
-Em uma VPS Ubuntu 24.04+ como `root`:
+Como `root` em Ubuntu 24.04+:
 
 ```bash
 apt-get update && apt-get install -y curl ca-certificates && bash <(curl -fsSL https://raw.githubusercontent.com/twossh/oneplus/main/setup.sh)
 ```
 
-Para instalar uma tag/branch específica:
+Para uma tag/branch específica:
 
 ```bash
-ONEPLUS_REF=v0.4.0 bash <(curl -fsSL https://raw.githubusercontent.com/twossh/oneplus/main/setup.sh)
+ONEPLUS_REF=v0.5.0 bash <(curl -fsSL https://raw.githubusercontent.com/twossh/oneplus/main/setup.sh)
 ```
 
-O bootstrap valida o sistema, baixa o projeto em diretório temporário, restaura permissões executáveis, executa `scripts/validate.sh`, chama o instalador e termina com `oneplus --check`.
-
-### Instalação manual
+Depois:
 
 ```bash
-git clone https://github.com/twossh/oneplus.git
-cd oneplus
-chmod +x setup.sh install.sh uninstall.sh bin/oneplus lib/*.sh modules/*.sh libexec/* scripts/*.sh scripts/*.py
-bash scripts/validate.sh
-bash install.sh
+oneplus --version
 oneplus --check
 oneplus
 ```
 
-## Comandos
+## Comandos principais
 
 ```bash
-oneplus             # menu principal
-oneplus users       # usuários gerenciados
-oneplus dropbear    # Dropbear
-oneplus websocket   # WebSocket
-oneplus tls         # TLS/Stunnel
-oneplus openvpn     # OpenVPN
-oneplus mux         # multiplexador sslh
-oneplus --version
+oneplus
+oneplus users
+oneplus dropbear
+oneplus websocket
+oneplus tls
+oneplus openvpn
+oneplus mux
+oneplus firewall
+oneplus backup
+oneplus reports
+oneplus diagnostics
+oneplus update
 oneplus --check
-oneplus --help
 ```
 
-## Fase 3 concluída — conectividade
+## Fase 4 — Operação e segurança
 
-### OpenVPN
+### Backup criptografado
 
-A v0.4.0 adiciona OpenVPN usando o pacote mantido pelo Ubuntu. O OnePlus não baixa binários OpenVPN de terceiros e não compila uma versão paralela.
+`oneplus backup` cria backup de configurações e identidades gerenciadas pelo OnePlus usando `age` com senha informada interativamente.
 
-Arquivos principais:
+O backup inclui, quando existentes:
+
+- `/etc/oneplus` — inclusive PKI OpenVPN, TLS, SlowDNS e Dropbear;
+- metadados de `/var/lib/oneplus/users`;
+- snippet OpenSSH do OnePlus;
+- limites PAM;
+- PAM OpenVPN;
+- configuração de forwarding do OnePlus;
+- somente as entradas `passwd`/`shadow` dos usuários realmente gerenciados pelo OnePlus.
+
+O OnePlus **não copia `/etc/shadow` inteiro** e não inclui diretórios `/home` por padrão.
+
+O arquivo final é `*.tar.gz.age`, modo `0600`, acompanhado de SHA-256 externo. Internamente existe outro manifesto SHA-256. A restauração valida checksum, criptografia, caminhos do TAR e recusa links simbólicos antes de alterar o host.
+
+Antes de aplicar uma restauração, o estado OnePlus atual é salvo em `/var/lib/oneplus/rollback` para recuperação local.
+
+### Auditoria de portas e nftables
+
+`oneplus firewall` mostra listeners TCP/UDP, tabelas nftables existentes e estado do UFW sem alterar regras externas.
+
+Quando NAT OpenVPN é habilitado, o OnePlus gerencia somente:
 
 ```text
-/etc/oneplus/openvpn.env
-/etc/oneplus/openvpn/pki/ca.key
-/etc/oneplus/openvpn/pki/ca.crt
-/etc/oneplus/openvpn/pki/server.key
-/etc/oneplus/openvpn/pki/server.crt
-/etc/oneplus/openvpn/tls-crypt.key
-/etc/pam.d/oneplus-openvpn
+table inet oneplus_filter
+table ip oneplus_nat
 ```
 
-Serviço:
+Nenhuma tabela global é limpa ou substituída. O NAT usa `masquerade` apenas para a rede `/24` configurada no OpenVPN e para a interface de saída escolhida pelo administrador.
 
-`oneplus-openvpn.service`
+O arquivo `/etc/sysctl.d/90-oneplus-forwarding.conf` habilita `net.ipv4.ip_forward=1` enquanto a função é configurada. Ao desabilitar o recurso, o OnePlus remove seu arquivo, mas **não força `ip_forward=0` em runtime**, pois outro software do servidor pode depender de forwarding.
 
-Padrões iniciais:
+Firewalls externos, UFW e security groups do provedor continuam independentes e podem exigir regras próprias.
 
-- escuta interna: `127.0.0.1:1194/TCP`;
-- rede privada: `10.8.0.0/24`;
-- máximo: `128` clientes;
-- certificado do servidor e CA gerados localmente;
-- controle TLS protegido por `tls-crypt`;
-- TLS mínimo 1.2;
-- `AES-256-GCM`, `AES-128-GCM` e ChaCha20-Poly1305 quando suportado;
-- sem compressão;
-- autenticação por usuário/senha via PAM;
-- somente membros de `oneplus-users` podem autenticar;
-- `root` não recebe acesso VPN por padrão porque não pertence ao grupo gerenciado;
-- nenhuma senha é gravada pelo OnePlus;
-- interface de gerenciamento somente em Unix socket local e restrita a root.
+### Full tunnel OpenVPN opcional
 
-O cliente não precisa de certificado privado individual nesta primeira implementação. Ele valida o certificado do servidor usando a CA embutida no perfil e autentica com a mesma conta gerenciada pelo OnePlus. A chave privada da CA permanece somente no servidor e nunca é exportada.
+O OpenVPN continua sem manipular firewall diretamente. A opção de full tunnel pertence ao módulo `firewall`.
 
-**Trade-off de segurança:** autenticação somente por usuário/senha (`verify-client-cert none`) é menos forte para identificar o dispositivo/cliente do que exigir um certificado individual. O OnePlus mantém essa modalidade nesta fase para integrar diretamente as contas `oneplus-users`; uma camada opcional de mTLS por cliente pode ser adicionada em uma fase de hardening.
-
-O menu exporta um `.ovpn` root-only contendo a CA pública e a chave `tls-crypt`.
-
-**Importante:** a v0.4.0 não ativa `redirect-gateway`, NAT, masquerade ou encaminhamento global automaticamente. O OpenVPN entrega o túnel/rede privada. A publicação de Internet através da VPN será adicionada como recurso opcional na Fase 4, em uma tabela de firewall dedicada e sem limpar regras existentes.
-
-Ao bloquear, expirar ou remover uma conta OnePlus, o módulo de usuários também tenta encerrar a sessão OpenVPN correspondente através do Unix socket de gerenciamento.
-
-### Multiplexador de portas / sslh
-
-A v0.4.0 adiciona `sslh` como multiplexador TCP opcional. Ele permite compartilhar uma porta TCP pública entre protocolos detectáveis, por exemplo:
+Quando explicitamente habilitado, o servidor passa a enviar:
 
 ```text
-Internet :443/TCP
-        |
-        +-- SSH      -> 127.0.0.1:22
-        +-- TLS      -> 127.0.0.1:8443
-        +-- OpenVPN  -> 127.0.0.1:1194
-        +-- HTTP/WS  -> 127.0.0.1:8080
+redirect-gateway def1 bypass-dhcp
 ```
 
-Arquivos:
+DNS IPv4 pode ser informado pelo administrador. Nenhum DNS é imposto por padrão.
 
-```text
-/etc/oneplus/mux.env
-oneplus-mux.service
-```
+### Relatórios
 
-Proteções:
+`oneplus reports` fornece snapshots de:
 
-- usa `sslh-select` do Ubuntu;
-- não usa modo transparente;
-- não cria regras `iptables`/`nftables`;
-- todos os backends são obrigatoriamente `127.0.0.1`/`localhost`;
-- exige pelo menos dois protocolos habilitados;
-- roda como `oneplus-mux`, não como root;
-- recebe somente `CAP_NET_BIND_SERVICE` para abrir portas privilegiadas;
-- conflito na porta pública aborta a ativação e restaura a configuração anterior.
+- usuários gerenciados e validade;
+- sessões OpenSSH/Dropbear;
+- clientes OpenVPN pelo Unix socket local;
+- listeners;
+- RX/TX por interface;
+- contadores das tabelas nftables OnePlus;
+- serviços OnePlus;
+- logins recentes.
 
-Como o modo transparente é deliberadamente desabilitado, serviços internos podem registrar o endereço do multiplexador como origem em vez do IP real do cliente. Essa é uma escolha de segurança para evitar manipulação automática de firewall nesta fase.
+Relatórios completos são salvos em `/var/log/oneplus/reports` com permissão root-only.
 
-O multiplexador trabalha somente com TCP. Portanto, para publicar OpenVPN através dele, configure o OpenVPN em modo TCP.
-O timeout padrão de detecção é **5 segundos**, favorecendo a identificação confiável do handshake OpenVPN antes do encaminhamento.
+### Diagnóstico e reparo
 
-### Dropbear
+`oneplus diagnostics` valida OpenSSH, hashes dos binários compilados, permissões de chaves, timers, nftables, dependências e unidades com falha.
 
-O OnePlus usa `dropbear-bin` do Ubuntu em `oneplus-dropbear.service`, com chave host Ed25519 própria e login de root sempre bloqueado por `-w`. Encaminhamento remoto `-R` permanece desabilitado por padrão.
+O reparo reinstala somente arquivos/units do OnePlus, corrige permissões e regenera limites/PAM. Ele não executa `apt upgrade`, não habilita protocolos desativados e não limpa firewall externo.
 
-### WebSocket
+## Atualização assinada
 
-Proxy próprio Python 3, sem dependências externas, com upstream fixo escolhido pelo administrador. Não aceita `X-Real-Host` para decidir destino e não funciona como open proxy. Possui limites de cabeçalho, frame e clientes.
+A v0.5.0 adiciona um atualizador estável **fail-closed** baseado em `minisign` + SHA-256.
 
-### TLS / Stunnel
+Uma atualização por tag só é aceita quando:
 
-Usa `stunnel4` do Ubuntu. TLS mínimo 1.2/1.3, certificado/chave validados antes da instalação, suporte a certificado existente ou autoassinado para testes/pinning.
+1. existe uma chave pública confiável em `/etc/oneplus/update.pub`;
+2. a tag contém `release/SHA256SUMS`;
+3. existe `release/SHA256SUMS.minisig` válido;
+4. todos os arquivos cobertos pelo manifesto passam no SHA-256;
+5. `VERSION` corresponde à tag;
+6. `scripts/validate.sh` passa antes de `install.sh`.
 
-## Usuários
+O atualizador não aceita downgrade e cria rollback local antes da instalação.
 
-As contas criadas pelo OnePlus pertencem ao grupo:
+### Criar a chave de releases
 
-`oneplus-users`
-
-Metadados root-only:
-
-`/var/lib/oneplus/users`
-
-O sistema possui:
-
-- criação de usuários regulares e temporários;
-- alteração de senha sem persistir senha;
-- validade por dias/data;
-- limite individual de conexões SSH;
-- bloqueio/desbloqueio;
-- monitor de OpenSSH/Dropbear;
-- tratamento automático de expiração;
-- remoção segura validando UID, grupo e home;
-- encerramento complementar de sessão OpenVPN ao bloquear/remover/expirar.
-
-## OpenSSH
-
-O OnePlus nunca substitui `/etc/ssh/sshd_config`. Alterações usam:
-
-`/etc/ssh/sshd_config.d/60-oneplus.conf`
-
-Antes de aplicar, executa:
+Faça isso **fora da VPS de produção**, em uma estação administrativa confiável:
 
 ```bash
-sshd -t
+minisign -G -p oneplus-release.pub -s oneplus-release.key
 ```
 
-Se a configuração nova for inválida, ocorre rollback.
+A chave secreta é protegida por senha por padrão. **Nunca envie `oneplus-release.key` ao GitHub ou à VPS.**
 
-## BadVPN e SlowDNS
+Copie somente `oneplus-release.pub` para a VPS e importe em:
 
-- BadVPN UDPGW é compilado de commit upstream fixado e recebe hash SHA-256 local;
-- UDPGW permanece em `127.0.0.1:7300` por padrão;
-- SlowDNS usa `dnstt v1.20260501.0`;
-- build Go usa verificação `GOSUMDB`;
-- chave privada dnstt é criada localmente;
-- SlowDNS não modifica `systemd-resolved`;
-- conflitos de bind/porta abortam com rollback.
+```bash
+oneplus update
+```
 
-## Portas sugeridas
+Para preparar uma release no computador de desenvolvimento:
 
-| Serviço | Padrão | Transporte |
-|---|---:|---|
-| OpenSSH | 22 | TCP |
-| Dropbear | 442 | TCP |
-| WebSocket | 80 | TCP |
-| TLS/Stunnel | 443 | TCP |
-| OpenVPN interno | 1194 em `127.0.0.1` | TCP |
-| Multiplexador | 443 | TCP |
-| BadVPN UDPGW | 7300 em `127.0.0.1` | TCP |
-| SlowDNS | configurável | UDP |
+```bash
+bash scripts/release-sign.sh /caminho/seguro/oneplus-release.key
+git add release/SHA256SUMS release/SHA256SUMS.minisig VERSION CHANGELOG.md
+git commit -m "Release v0.5.1"
+git tag v0.5.1
+git push origin main --tags
+```
 
-TLS e multiplexador não podem ocupar a mesma porta pública ao mesmo tempo. Para usar TLS atrás do multiplexador, reconfigure o TLS para uma porta loopback interna, como `127.0.0.1:8443`.
+O `setup.sh` usado na primeira instalação continua sendo um bootstrap via HTTPS/GitHub. Depois que a chave pública é confiada ao servidor, upgrades estáveis podem usar a cadeia assinada acima.
+
+## Conectividade
+
+O OnePlus mantém:
+
+- OpenSSH por snippet validado com `sshd -t`;
+- Dropbear oficial Ubuntu com root bloqueado;
+- WebSocket Python 3 com upstream fixo;
+- TLS/Stunnel TLS 1.2+;
+- OpenVPN oficial Ubuntu com PAM restrito a `oneplus-users`;
+- multiplexação TCP via `sslh` com backends loopback;
+- BadVPN UDPGW compilado de commit fixado;
+- SlowDNS/dnstt `v1.20260501.0`;
+- manutenção automática de expiração/limites via systemd.
+
+## Arquivos principais
+
+```text
+/opt/oneplus
+/etc/oneplus
+/var/lib/oneplus/users
+/var/lib/oneplus/rollback
+/var/lib/oneplus/update-rollback
+/var/log/oneplus/reports
+/etc/ssh/sshd_config.d/60-oneplus.conf
+/etc/security/limits.d/90-oneplus.conf
+/etc/pam.d/oneplus-openvpn
+/etc/sysctl.d/90-oneplus-forwarding.conf
+```
 
 ## Serviços systemd
 
@@ -216,65 +198,25 @@ oneplus-websocket.service
 oneplus-tls.service
 oneplus-openvpn.service
 oneplus-mux.service
+oneplus-firewall.service
 oneplus-badvpn.service
 oneplus-slowdns.service
 oneplus-user-maintenance.service
 oneplus-user-maintenance.timer
 ```
 
-Todos permanecem desabilitados até configuração explícita, exceto o timer seguro de manutenção de usuários.
+Somente o timer de manutenção de usuários é habilitado automaticamente. Protocolos e NAT permanecem sob decisão explícita do administrador.
 
-## Validação
-
-Antes de instalar:
+## Validação antes do GitHub
 
 ```bash
 bash scripts/validate.sh
 sudo bash scripts/test-users.sh
 bash scripts/test-openvpn.sh
 bash scripts/test-mux.sh
+bash scripts/test-operations.sh
 python3 scripts/test-websocket.py
+systemd-analyze verify systemd/*.service systemd/*.timer
 ```
 
-O GitHub Actions executa os mesmos testes estáticos/funcionais compatíveis e valida todas as unidades systemd em `ubuntu-24.04`.
-
-O validador procura, entre outros pontos:
-
-- erros de sintaxe Bash/Python;
-- CRLF;
-- bits executáveis;
-- chaves privadas acidentalmente versionadas;
-- comandos destrutivos;
-- execução insegura de `.env`;
-- OpenVPN com PAM restrito a `oneplus-users`;
-- ausência de opções OpenVPN removidas/legadas;
-- ausência de NAT/firewall automático no módulo OpenVPN;
-- gerenciamento OpenVPN somente por Unix socket;
-- backends sslh somente em loopback;
-- ausência de modo transparente no sslh;
-- Dropbear com root bloqueado;
-- WebSocket com upstream fixo;
-- TLS mínimo 1.2+;
-- integridade BadVPN/dnstt.
-
-## Atualização
-
-Enquanto o atualizador versionado interno não está pronto, execute novamente o bootstrap:
-
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/twossh/oneplus/main/setup.sh)
-```
-
-Configurações existentes em `/etc/oneplus` são preservadas. Novos arquivos padrão são criados apenas quando ainda não existem.
-
-## Desinstalação
-
-```bash
-sudo ./uninstall.sh
-```
-
-A remoção desativa os serviços OnePlus, remove unidades, launcher e o arquivo PAM específico do OpenVPN. Por segurança, `/etc/oneplus`, PKI, metadados e contas de usuários são preservados.
-
-## Estado desta versão
-
-A Fase 3 está funcionalmente completa no código com OpenVPN e multiplexação. A v0.4.0 ainda deve ser validada em uma VPS Ubuntu 24.04 real antes de ser considerada pronta para produção, especialmente login OpenVPN real, perfil em desktop/mobile, OpenVPN atrás do sslh, reboot e combinações de portas.
+O GitHub Actions usa Ubuntu 24.04 e repete as validações compatíveis.

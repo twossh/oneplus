@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.0 — 2026-08-10
+- Iniciada/concluída a camada principal da Fase 4 de operação e segurança do host.
+- Adicionado backup obrigatório criptografado com `age`, checksum externo e manifesto SHA-256 interno.
+- Backup captura apenas contas gerenciadas pelo OnePlus em vez de copiar `/etc/shadow` integralmente.
+- Restauração valida caminhos e tipos TAR, recusa links/arquivos especiais e não altera contas externas preexistentes; cria rollback root-only antes de alterar o host.
+- Adicionada auditoria de listeners, UFW e tabelas nftables sem alteração de regras externas.
+- Adicionado serviço `oneplus-firewall.service` com tabelas exclusivas `inet oneplus_filter` e `ip oneplus_nat`.
+- NAT/masquerade OpenVPN agora é opcional e restrito à rede VPN + interface de saída escolhida.
+- O OnePlus nunca executa `nft flush ruleset`; ao desabilitar NAT, remove somente suas próprias tabelas.
+- Forwarding IPv4 usa arquivo sysctl próprio; a desativação não força `ip_forward=0` em runtime.
+- Full tunnel OpenVPN (`redirect-gateway def1`) tornou-se opcional e controlado pelo módulo de firewall; DNS não é imposto por padrão.
+- Adicionados relatórios de usuários, sessões, OpenVPN, interfaces, listeners, nftables e logins recentes.
+- Adicionado diagnóstico/reparo seguro de arquivos, permissões, integridade e units OnePlus.
+- Adicionado atualizador estável fail-closed com `minisign` + manifesto SHA-256 + bloqueio de downgrade + rollback local.
+- Adicionado `scripts/release-sign.sh`; a chave privada de release permanece obrigatoriamente fora do repositório/VPS.
+- Instalador passa a instalar `nftables`, `age` e `minisign` do Ubuntu.
+- Adicionados `oneplus firewall`, `oneplus backup`, `oneplus reports`, `oneplus diagnostics` e `oneplus update`.
+- Adicionado `scripts/test-operations.sh` e novas validações no GitHub Actions.
+
 ## 0.4.0 — 2026-08-10
 - Concluída a Fase 3 com OpenVPN opcional e multiplexação TCP via sslh.
 - OpenVPN usa o pacote oficial do Ubuntu, sem binário externo ou compilação paralela.

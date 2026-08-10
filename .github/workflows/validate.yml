@@ -30,6 +30,9 @@ jobs:
       - name: Multiplexer module tests
         run: bash scripts/test-mux.sh
 
+      - name: Operations/security tests
+        run: bash scripts/test-operations.sh
+
       - name: WebSocket integration tests
         run: python3 scripts/test-websocket.py
 

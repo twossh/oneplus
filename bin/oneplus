@@ -16,6 +16,11 @@ source "$ROOT_DIR/modules/mux.sh"
 source "$ROOT_DIR/modules/badvpn.sh"
 source "$ROOT_DIR/modules/slowdns.sh"
 source "$ROOT_DIR/modules/users.sh"
+source "$ROOT_DIR/modules/firewall.sh"
+source "$ROOT_DIR/modules/backup.sh"
+source "$ROOT_DIR/modules/reports.sh"
+source "$ROOT_DIR/modules/diagnostics.sh"
+source "$ROOT_DIR/modules/update.sh"
 
 require_root
 check_supported_os
@@ -64,6 +69,11 @@ health_check() {
   check_item "Arquivo de limites OnePlus" test -f /etc/security/limits.d/90-oneplus.conf
   check_item "Unidade de manutenção de usuários" systemctl cat oneplus-user-maintenance.service
   check_item "Timer de manutenção de usuários" systemctl is-enabled oneplus-user-maintenance.timer
+  check_item "nftables instalado" bash -c 'command -v nft >/dev/null 2>&1'
+  check_item "age instalado" bash -c 'command -v age >/dev/null 2>&1'
+  check_item "minisign instalado" bash -c 'command -v minisign >/dev/null 2>&1'
+  check_item "Configuração firewall OnePlus" test -r /etc/oneplus/firewall.env
+  check_item "Unidade firewall OnePlus" systemctl cat oneplus-firewall.service
 
   printf "\nOpenSSH:   %b\n" "$(service_state ssh.service)"
   printf "Dropbear:  %b\n" "$(service_state oneplus-dropbear.service)"
@@ -74,6 +84,7 @@ health_check() {
   printf "BadVPN:    %b\n" "$(service_state oneplus-badvpn.service)"
   printf "SlowDNS:   %b\n" "$(service_state oneplus-slowdns.service)"
   printf "Usuários:  %b\n" "$(service_state oneplus-user-maintenance.timer)"
+  printf "Firewall:  %b\n" "$(service_state oneplus-firewall.service)"
 
   if (( failed )); then
     printf "\n%bVerificação concluída com falhas.%b\n" "$C_RED" "$C_RESET"
@@ -95,6 +106,11 @@ Uso:
   oneplus tls         Abre a gestão TLS/Stunnel
   oneplus openvpn     Abre a gestão OpenVPN
   oneplus mux         Abre o multiplexador sslh
+  oneplus firewall    Auditoria de portas, nftables e NAT OpenVPN
+  oneplus backup      Backup/restauração criptografado
+  oneplus reports     Relatórios de usuários, sessões e tráfego
+  oneplus diagnostics Diagnóstico e reparo seguro
+  oneplus update      Atualização por tag assinada
   oneplus --help      Mostra esta ajuda
 EOF2
 }
@@ -113,8 +129,8 @@ main_menu() {
       "$(service_state ssh.service)" "$(service_state oneplus-dropbear.service)" "$(service_state oneplus-websocket.service)"
     printf "TLS:     %-16b OpenVPN:  %-16b Multiplex: %b\n" \
       "$(service_state oneplus-tls.service)" "$(service_state oneplus-openvpn.service)" "$(service_state oneplus-mux.service)"
-    printf "BadVPN:  %-16b SlowDNS:   %b\n\n" \
-      "$(service_state oneplus-badvpn.service)" "$(service_state oneplus-slowdns.service)"
+    printf "BadVPN:  %-16b SlowDNS:   %-16b Firewall: %b\n\n" \
+      "$(service_state oneplus-badvpn.service)" "$(service_state oneplus-slowdns.service)" "$(service_state oneplus-firewall.service)"
     printf "1) Usuários SSH\n"
     printf "2) Sistema e diagnóstico\n"
     printf "3) OpenSSH\n"
@@ -125,7 +141,12 @@ main_menu() {
     printf "8) Multiplexador de portas / sslh\n"
     printf "9) BadVPN UDPGW\n"
     printf "10) SlowDNS / DNSTT\n"
-    printf "11) Sobre esta versão\n"
+    printf "11) Portas / Firewall / NAT\n"
+    printf "12) Backup e restauração\n"
+    printf "13) Relatórios\n"
+    printf "14) Diagnóstico e reparo\n"
+    printf "15) Atualização assinada\n"
+    printf "16) Sobre esta versão\n"
     printf "0) Sair\n\nEscolha: "
     read -r opt
     case "$opt" in
@@ -139,7 +160,12 @@ main_menu() {
       8) module_mux ;;
       9) module_badvpn ;;
       10) module_slowdns ;;
-      11)
+      11) module_firewall ;;
+      12) module_backup ;;
+      13) module_reports ;;
+      14) module_diagnostics ;;
+      15) module_update ;;
+      16)
         clear
         cat <<EOF2
 OnePlus ${VERSION}
@@ -157,7 +183,10 @@ Princípios:
 - WebSocket com destino fixo, sem open proxy/X-Real-Host dinâmico;
 - TLS via stunnel com TLS 1.2+ e chave privada protegida;
 - OpenVPN com autenticação PAM restrita às contas oneplus-users;
-- multiplexação TCP via sslh sem modo transparente nem alteração de firewall;
+- multiplexação TCP via sslh sem modo transparente;
+- firewall/NAT opcional em tabelas nftables próprias, sem limpar regras existentes;
+- backup criptografado com age, sem exportar /etc/shadow inteiro;
+- atualizador estável fail-closed com minisign;
 - contas SSH gerenciadas sem armazenar senhas;
 - expiração e limites aplicados apenas a contas criadas pelo OnePlus.
 EOF2
@@ -179,6 +208,11 @@ case "${1:-}" in
   tls) module_tls ;;
   openvpn|vpn) module_openvpn ;;
   mux|sslh) module_mux ;;
+  firewall|fw) module_firewall ;;
+  backup|restore) module_backup ;;
+  reports|report) module_reports ;;
+  diagnostics|diag) module_diagnostics ;;
+  update|upgrade) module_update ;;
   --help|-h) show_help ;;
   *) error "Argumento desconhecido: $1"; show_help; exit 2 ;;
 esac
