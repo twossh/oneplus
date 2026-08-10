@@ -43,7 +43,7 @@ primary_ipv4() {
 }
 
 is_valid_port() {
-  [[ "$1" =~ ^[0-9]+$ ]] && (( $1 >= 1 && $1 <= 65535 ))
+  [[ "$1" =~ ^[0-9]+$ ]] && (( 10#$1 >= 1 && 10#$1 <= 65535 ))
 }
 
 is_valid_domain() {
@@ -90,4 +90,39 @@ backup_file_once() {
     cp -a -- "$file" "$dst"
     chmod a-w "$dst" 2>/dev/null || true
   fi
+}
+
+tcp_port_in_use() {
+  local port="$1"
+  is_valid_port "$port" || return 2
+  ss -H -ltn 2>/dev/null | awk -v p="$port" '$4 ~ (":" p "$") {found=1} END {exit(found?0:1)}'
+}
+
+safe_yes_no() {
+  case "$1" in
+    yes|no) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+ipv4_is_local_address() {
+  local wanted="$1"
+  is_valid_ipv4 "$wanted" || return 1
+  ip -o -4 addr show 2>/dev/null | awk -v ip="$wanted" '{split($4,a,"/"); if (a[1]==ip) found=1} END {exit(found?0:1)}'
+}
+
+udp_bind_port_in_use() {
+  local bind="$1" port="$2"
+  is_valid_ipv4 "$bind" || return 2
+  is_valid_port "$port" || return 2
+  ss -H -lun 2>/dev/null | awk -v b="$bind" -v p="$port" '
+    {
+      ep=$4
+      if (ep !~ (":" p "$")) next
+      sub(":" p "$", "", ep)
+      sub(/%.*/, "", ep)
+      if (b=="0.0.0.0" || ep==b || ep=="0.0.0.0" || ep=="*" || ep=="[::]") conflict=1
+    }
+    END {exit(conflict?0:1)}
+  '
 }

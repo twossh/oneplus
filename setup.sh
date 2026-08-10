@@ -54,7 +54,8 @@ chmod 0755 \
   "$SRC_DIR/lib/"*.sh \
   "$SRC_DIR/modules/"*.sh \
   "$SRC_DIR/libexec/"* \
-  "$SRC_DIR/scripts/"*.sh
+  "$SRC_DIR/scripts/"*.sh \
+  "$SRC_DIR/scripts/"*.py
 
 printf '[INFO] Validando a árvore baixada...\n'
 bash "$SRC_DIR/scripts/validate.sh"

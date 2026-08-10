@@ -16,13 +16,16 @@ jobs:
 
       - name: Restore executable permissions for validation
         run: |
-          chmod +x setup.sh install.sh uninstall.sh bin/oneplus lib/*.sh modules/*.sh libexec/* scripts/*.sh
+          chmod +x setup.sh install.sh uninstall.sh bin/oneplus lib/*.sh modules/*.sh libexec/* scripts/*.sh scripts/*.py
 
       - name: Static validation
         run: bash scripts/validate.sh
 
-      - name: User module static tests
+      - name: User module tests
         run: sudo bash scripts/test-users.sh
+
+      - name: WebSocket integration tests
+        run: python3 scripts/test-websocket.py
 
       - name: Validate systemd units
         run: |
@@ -30,6 +33,10 @@ jobs:
             echo '/opt/oneplus já existe no runner; não é seguro sobrescrever.' >&2
             exit 1
           fi
+          for u in oneplus-ws oneplus-tls oneplus-badvpn oneplus-dnstt; do
+            sudo groupadd --system "$u" 2>/dev/null || true
+            id -u "$u" >/dev/null 2>&1 || sudo useradd --system --gid "$u" --no-create-home --shell /usr/sbin/nologin "$u"
+          done
           sudo ln -s "$GITHUB_WORKSPACE" /opt/oneplus
           trap 'sudo rm -f /opt/oneplus' EXIT
           systemd-analyze verify systemd/*.service systemd/*.timer

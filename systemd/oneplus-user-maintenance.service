@@ -1,6 +1,6 @@
 [Unit]
 Description=OnePlus SSH user expiration and connection-limit maintenance
-After=systemd-user-sessions.service ssh.service
+After=systemd-user-sessions.service ssh.service oneplus-dropbear.service
 
 [Service]
 Type=oneshot

@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 CONF=/etc/oneplus/slowdns.env
+BIN=/usr/local/lib/oneplus/bin/dnstt-server
+EXPECTED_KEY=/etc/oneplus/slowdns/server.key
 [[ -r "$CONF" ]] || { echo "Configuração ausente: $CONF" >&2; exit 1; }
+[[ -x "$BIN" ]] || { echo "dnstt-server não instalado." >&2; exit 1; }
 
 SLOWDNS_DOMAIN=""
 SLOWDNS_BIND=""
@@ -9,9 +12,8 @@ SLOWDNS_PORT="53"
 SLOWDNS_PUBLIC_IP=""
 SLOWDNS_UPSTREAM="127.0.0.1:22"
 SLOWDNS_MTU="1232"
-SLOWDNS_PRIVKEY="/etc/oneplus/slowdns/server.key"
+SLOWDNS_PRIVKEY="$EXPECTED_KEY"
 
-# Lê somente chaves conhecidas. O arquivo não é executado como código shell.
 while IFS='=' read -r key value; do
   [[ -z "$key" || "$key" == \#* ]] && continue
   case "$key" in
@@ -25,11 +27,40 @@ while IFS='=' read -r key value; do
   esac
 done < "$CONF"
 
-: "${SLOWDNS_DOMAIN:?Configure SLOWDNS_DOMAIN em /etc/oneplus/slowdns.env}"
-: "${SLOWDNS_BIND:?Configure SLOWDNS_BIND em /etc/oneplus/slowdns.env}"
+valid_port() { [[ "$1" =~ ^[0-9]+$ ]] && (( 10#$1 >= 1 && 10#$1 <= 65535 )); }
+valid_ipv4() {
+  local ip="$1" IFS=. parts o
+  read -r -a parts <<< "$ip"
+  [[ ${#parts[@]} -eq 4 ]] || return 1
+  for o in "${parts[@]}"; do
+    [[ "$o" =~ ^[0-9]{1,3}$ ]] || return 1
+    (( 10#$o <= 255 )) || return 1
+  done
+}
+valid_domain() {
+  local d="$1"
+  [[ ${#d} -le 253 ]] && [[ "$d" =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$ ]]
+}
+valid_hostport() {
+  local value="$1" host port
+  [[ "$value" == *:* ]] || return 1
+  host=${value%:*}; port=${value##*:}
+  valid_port "$port" || return 1
+  [[ "$host" == localhost ]] && return 0
+  valid_ipv4 "$host" && return 0
+  valid_domain "$host"
+}
+
+valid_domain "$SLOWDNS_DOMAIN" || { echo "SLOWDNS_DOMAIN inválido." >&2; exit 1; }
+valid_ipv4 "$SLOWDNS_BIND" || { echo "SLOWDNS_BIND inválido." >&2; exit 1; }
+valid_port "$SLOWDNS_PORT" || { echo "SLOWDNS_PORT inválido." >&2; exit 1; }
+[[ -z "$SLOWDNS_PUBLIC_IP" ]] || valid_ipv4 "$SLOWDNS_PUBLIC_IP" || { echo "SLOWDNS_PUBLIC_IP inválido." >&2; exit 1; }
+valid_hostport "$SLOWDNS_UPSTREAM" || { echo "SLOWDNS_UPSTREAM inválido." >&2; exit 1; }
+[[ "$SLOWDNS_MTU" =~ ^[0-9]+$ ]] && (( 10#$SLOWDNS_MTU >= 512 && 10#$SLOWDNS_MTU <= 4096 )) || { echo "SLOWDNS_MTU inválido." >&2; exit 1; }
+[[ "$SLOWDNS_PRIVKEY" == "$EXPECTED_KEY" ]] || { echo "SLOWDNS_PRIVKEY deve usar o caminho protegido padrão do OnePlus." >&2; exit 1; }
 [[ -r "$SLOWDNS_PRIVKEY" ]] || { echo "Chave privada SlowDNS ausente." >&2; exit 1; }
 
-exec /usr/local/lib/oneplus/bin/dnstt-server \
+exec "$BIN" \
   -udp "${SLOWDNS_BIND}:${SLOWDNS_PORT}" \
   -mtu "$SLOWDNS_MTU" \
   -privkey-file "$SLOWDNS_PRIVKEY" \

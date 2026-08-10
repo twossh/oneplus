@@ -119,10 +119,10 @@ regenerate_login_limits() {
 user_ssh_processes() {
   local user="$1"
   if [[ -n "${ONEPLUS_PS_SNAPSHOT:-}" && -r "${ONEPLUS_PS_SNAPSHOT}" ]]; then
-    awk -v u="$user" '$1==u && ($4=="sshd" || $4=="sshd-session") {print $2, $3}' "$ONEPLUS_PS_SNAPSHOT"
+    awk -v u="$user" '$1==u && ($4=="sshd" || $4=="sshd-session" || $4=="dropbear") {print $2, $3}' "$ONEPLUS_PS_SNAPSHOT"
   else
     ps -eo user=,pid=,etimes=,comm= 2>/dev/null | awk -v u="$user" '
-      $1==u && ($4=="sshd" || $4=="sshd-session") {print $2, $3}
+      $1==u && ($4=="sshd" || $4=="sshd-session" || $4=="dropbear") {print $2, $3}
     '
   fi
 }
@@ -148,7 +148,7 @@ pid_is_user_ssh() {
   local user="$1" pid="$2" puser comm
   puser=$(ps -o user= -p "$pid" 2>/dev/null | awk '{$1=$1; print}')
   comm=$(ps -o comm= -p "$pid" 2>/dev/null | awk '{$1=$1; print}')
-  [[ "$puser" == "$user" && ( "$comm" == "sshd" || "$comm" == "sshd-session" ) ]]
+  [[ "$puser" == "$user" && ( "$comm" == "sshd" || "$comm" == "sshd-session" || "$comm" == "dropbear" ) ]]
 }
 
 terminate_user_sessions() {
@@ -597,7 +597,9 @@ monitor_connections() {
     managed_user_identity_ok "$user" || continue
     while read -r pid elapsed; do
       [[ -n "$pid" ]] || continue
-      printf '%-20s %-9s %-12s sshd\n' "$user" "$pid" "$elapsed"
+      local comm
+      comm=$(ps -o comm= -p "$pid" 2>/dev/null | awk '{$1=$1; print}')
+      printf '%-20s %-9s %-12s %s\n' "$user" "$pid" "$elapsed" "${comm:-ssh}"
       ((count+=1))
     done < <(user_ssh_processes "$user")
   done
@@ -669,7 +671,7 @@ maintain_users() {
 
 show_user_maintenance_status() {
   printf 'Timer: %s\n' "$(service_state oneplus-user-maintenance.timer)"
-  printf 'PAM pam_limits no SSH: '
+  printf 'PAM pam_limits no OpenSSH: '
   if pam_limits_available_for_sshd; then
     printf '%bSIM%b\n' "$C_GREEN" "$C_RESET"
   else

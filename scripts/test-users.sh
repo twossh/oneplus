@@ -35,3 +35,18 @@ meta_set "$FILE" CONNECTION_LIMIT 3
 [[ "$(meta_get "$FILE" CONNECTION_LIMIT)" == 3 ]] || fail_test 'meta_set CONNECTION_LIMIT'
 
 printf 'USER STATIC TESTS: OK\n'
+
+# O monitor complementar deve reconhecer sessões OpenSSH e Dropbear,
+# ignorando processos comuns do mesmo usuário.
+ONEPLUS_PS_SNAPSHOT="$TMP/ps.txt"
+cat > "$ONEPLUS_PS_SNAPSHOT" <<'EOF2'
+cliente1 101 500 sshd
+cliente1 102 400 dropbear
+cliente1 103 300 bash
+outro 104 200 dropbear
+EOF2
+mapfile -t ssh_rows < <(user_ssh_processes 'cliente1')
+[[ ${#ssh_rows[@]} -eq 2 ]] || fail_test 'monitor deveria contar OpenSSH e Dropbear'
+[[ "${ssh_rows[*]}" == *'101 500'* && "${ssh_rows[*]}" == *'102 400'* ]] || fail_test 'PIDs SSH esperados não encontrados'
+
+printf 'USER CONNECTIVITY TESTS: OK\n'

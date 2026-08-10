@@ -1,0 +1,20 @@
+[Unit]
+Description=OnePlus Dropbear SSH compatibility service
+After=network.target systemd-user-sessions.service
+
+[Service]
+Type=simple
+ExecStart=/opt/oneplus/libexec/run-dropbear
+Restart=on-failure
+RestartSec=2s
+UMask=0077
+LimitNOFILE=65535
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

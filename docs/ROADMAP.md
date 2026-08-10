@@ -22,17 +22,31 @@
 
 ## Fase 2.1 — Validação real
 - [ ] testar instalação limpa em Ubuntu 24.04 LTS
-- [ ] testar reinstalação sobre v0.1.2
+- [ ] testar reinstalação/upgrade sobre v0.2.0
 - [ ] validar limites com shell interativo, SFTP e túnel `ssh -N`
+- [ ] validar limite combinado OpenSSH + Dropbear
 - [ ] validar expiração de conta teste em ambiente real
 - [ ] validar atualização após reboot
 
 ## Fase 3 — Conectividade
-- [ ] Dropbear moderno, somente se necessário
-- [ ] TLS/Stunnel opcional
-- [ ] proxy WebSocket moderno
+- [x] Dropbear usando pacote oficial Ubuntu e serviço próprio
+- [x] TLS/Stunnel opcional com TLS 1.2+
+- [x] proxy WebSocket Python 3 com upstream fixo
+- [x] rollback por conflito/falha de serviço nos novos módulos
+- [x] teste de integração RFC6455/legacy do WebSocket
 - [ ] OpenVPN opcional
 - [ ] multiplexação de portas sem hacks destrutivos
+
+## Fase 3.1 — Validação real
+- [ ] testar login real via Dropbear
+- [ ] testar senha e chave pública via Dropbear
+- [ ] testar encaminhamento local e bloqueio de `-R`
+- [ ] testar WebSocket RFC6455 com cliente real
+- [ ] testar modo legacy somente onde houver necessidade
+- [ ] testar TLS/Stunnel com certificado público
+- [ ] testar TLS autoassinado com pin explícito
+- [ ] validar concorrência e consumo de recursos
+- [ ] validar reboot com cada combinação de serviços habilitados
 
 ## Fase 4 — Operação
 - [ ] backup/restauração seguro

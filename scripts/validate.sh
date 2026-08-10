@@ -10,11 +10,12 @@ ok()   { printf '[OK] %s\n' "$*"; }
 required=(
   VERSION README.md CHANGELOG.md setup.sh install.sh uninstall.sh scripts/test-users.sh
   bin/oneplus lib/common.sh lib/os.sh
-  modules/system.sh modules/ssh.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh
-  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance
-  defaults/oneplus.conf defaults/badvpn.env defaults/slowdns.env defaults/users.conf
-  systemd/oneplus-badvpn.service systemd/oneplus-slowdns.service
+  modules/system.sh modules/ssh.sh modules/dropbear.sh modules/websocket.sh modules/tls.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh
+  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/websocket_proxy.py
+  defaults/oneplus.conf defaults/badvpn.env defaults/slowdns.env defaults/users.conf defaults/dropbear.env defaults/websocket.env defaults/tls.env
+  systemd/oneplus-badvpn.service systemd/oneplus-slowdns.service systemd/oneplus-dropbear.service systemd/oneplus-websocket.service systemd/oneplus-tls.service
   systemd/oneplus-user-maintenance.service systemd/oneplus-user-maintenance.timer
+  scripts/test-websocket.py
 )
 
 for rel in "${required[@]}"; do
@@ -28,7 +29,8 @@ grep -Fq "# OnePlus v${VERSION}" "$ROOT_DIR/README.md" || fail "README não corr
 mapfile -t shell_files < <(
   {
     find "$ROOT_DIR" -type f -name '*.sh' -not -path '*/.git/*' -print
-    printf '%s\n' "$ROOT_DIR/bin/oneplus" "$ROOT_DIR/libexec/run-badvpn" "$ROOT_DIR/libexec/run-slowdns" "$ROOT_DIR/libexec/run-user-maintenance"
+    printf '%s\n' "$ROOT_DIR/bin/oneplus" "$ROOT_DIR/libexec/run-badvpn" "$ROOT_DIR/libexec/run-slowdns" "$ROOT_DIR/libexec/run-user-maintenance" \
+      "$ROOT_DIR/libexec/run-dropbear" "$ROOT_DIR/libexec/run-websocket" "$ROOT_DIR/libexec/run-tls"
   } | sort -u
 )
 
@@ -44,8 +46,9 @@ done
 (( FAILED == 0 )) && ok "Sintaxe Bash e finais de linha validados."
 
 executables=(setup.sh install.sh uninstall.sh bin/oneplus lib/common.sh lib/os.sh \
-  modules/system.sh modules/ssh.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh \
-  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance scripts/validate.sh scripts/test-users.sh)
+  modules/system.sh modules/ssh.sh modules/dropbear.sh modules/websocket.sh modules/tls.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh \
+  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/websocket_proxy.py \
+  scripts/validate.sh scripts/test-users.sh scripts/test-websocket.py)
 for rel in "${executables[@]}"; do
   [[ -x "$ROOT_DIR/$rel" ]] || fail "Permissão executável ausente: $rel"
 done
@@ -67,6 +70,12 @@ for re in "${forbidden_regex[@]}"; do
   rm -f /tmp/oneplus-validate-match.$$
 done
 
+if find "$ROOT_DIR" -type d -name '__pycache__' -o -type f -name '*.py[co]' | grep -q .; then
+  fail "Artefatos Python compilados (__pycache__/pyc) não devem entrar no repositório."
+else
+  ok "Nenhum artefato Python compilado encontrado."
+fi
+
 if grep -RIl --exclude-dir=.git --exclude='validate.sh' -- '-----BEGIN .*PRIVATE KEY-----' "$ROOT_DIR" | grep -q .; then
   fail "Material de chave privada encontrado no repositório."
 else
@@ -79,6 +88,76 @@ else
   ok "Leitura segura de arquivos .env validada."
 fi
 
+
+
+if command -v python3 >/dev/null 2>&1; then
+  if ! PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/oneplus-pycache.$$" python3 -m py_compile "$ROOT_DIR/libexec/websocket_proxy.py" "$ROOT_DIR/scripts/test-websocket.py"; then
+    fail "Erro de sintaxe Python no módulo WebSocket."
+  else
+    ok "Sintaxe Python do WebSocket validada."
+  fi
+  rm -rf -- "${TMPDIR:-/tmp}/oneplus-pycache.$$" 2>/dev/null || true
+else
+  printf '[AVISO] Python 3 ainda não está instalado; o instalador repetirá esta validação após instalar as dependências.\n'
+fi
+
+# Proteções obrigatórias da conectividade.
+if ! grep -Fq 'args=(/usr/sbin/dropbear -F -E -w ' "$ROOT_DIR/libexec/run-dropbear"; then
+  fail "Dropbear OnePlus deve iniciar com -w (root bloqueado)."
+else
+  ok "Dropbear mantém login de root bloqueado."
+fi
+if grep -Eiq 'x-real-host.*(connect|upstream)|findheader.*x-real-host' "$ROOT_DIR/libexec/websocket_proxy.py"; then
+  fail "WebSocket não pode escolher upstream a partir de X-Real-Host."
+else
+  ok "WebSocket usa upstream fixo definido pelo administrador."
+fi
+if ! grep -Eq '^TLS_MIN_VERSION=TLSv1\.(2|3)$' "$ROOT_DIR/defaults/tls.env"; then
+  fail "TLS_MIN_VERSION padrão inválido."
+fi
+if ! grep -Fq '[[ "$minver" == TLSv1.2 || "$minver" == TLSv1.3 ]]' "$ROOT_DIR/libexec/run-tls"; then
+  fail "Wrapper TLS não restringe a versão mínima a TLS 1.2/1.3."
+else
+  ok "TLS mínimo restrito a TLS 1.2 ou 1.3."
+fi
+if ! grep -Fq '10#$max_clients <= 4096' "$ROOT_DIR/libexec/run-websocket" || \
+   ! grep -Fq '10#$header_limit <= 65536' "$ROOT_DIR/libexec/run-websocket" || \
+   ! grep -Fq '10#$max_frame <= 67108864' "$ROOT_DIR/libexec/run-websocket"; then
+  fail "Wrapper WebSocket não restringe adequadamente limites de recursos."
+else
+  ok "Limites de recursos do WebSocket validados."
+fi
+
+if ! grep -Fq 'User=oneplus-ws' "$ROOT_DIR/systemd/oneplus-websocket.service" ||    ! grep -Fq 'User=oneplus-tls' "$ROOT_DIR/systemd/oneplus-tls.service"; then
+  fail "WebSocket/TLS devem executar com usuários de serviço dedicados."
+else
+  ok "WebSocket e TLS usam usuários de serviço dedicados."
+fi
+
+# Integridade dos protocolos compilados.
+if ! grep -Eq '^BADVPN_COMMIT="[0-9a-f]{40}"$' "$ROOT_DIR/modules/badvpn.sh" || \
+   ! grep -Fq 'sha256sum -c "$BADVPN_HASH_FILE"' "$ROOT_DIR/modules/badvpn.sh"; then
+  fail "BadVPN deve usar commit fixado e validação SHA-256 do binário instalado."
+else
+  ok "BadVPN usa fonte fixada e controle de integridade local."
+fi
+if ! grep -Fq 'DNSTT_VERSION="v1.20260501.0"' "$ROOT_DIR/modules/slowdns.sh" || \
+   ! grep -Fq 'GOSUMDB=sum.golang.org' "$ROOT_DIR/modules/slowdns.sh" || \
+   ! grep -Fq 'sha256sum -c "$DNSTT_HASH_FILE"' "$ROOT_DIR/modules/slowdns.sh"; then
+  fail "SlowDNS/dnstt não está com versão/verificação de integridade esperadas."
+else
+  ok "SlowDNS/dnstt mantém versão fixada e controle de integridade local."
+fi
+if ! grep -Fq 'udp_bind_port_in_use "$bind" "$port"' "$ROOT_DIR/modules/slowdns.sh"; then
+  fail "SlowDNS deve abortar em conflito de bind/porta UDP."
+else
+  ok "SlowDNS valida conflito UDP sem alterar resolvedores do sistema."
+fi
+if ! grep -Fq '[[ "$SLOWDNS_PRIVKEY" == "$EXPECTED_KEY" ]]' "$ROOT_DIR/libexec/run-slowdns"; then
+  fail "Wrapper SlowDNS deve restringir a chave privada ao caminho protegido OnePlus."
+else
+  ok "Caminho da chave privada SlowDNS está restrito."
+fi
 
 # Proteções obrigatórias do módulo de usuários.
 if ! grep -Fq '(( uid > 0 )) || return 1' "$ROOT_DIR/modules/users.sh"; then

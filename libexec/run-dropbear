@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+CONF=/etc/oneplus/dropbear.env
+KEY=/etc/oneplus/dropbear/dropbear_ed25519_host_key
+
+[[ -r "$CONF" ]] || { echo "Configuração ausente: $CONF" >&2; exit 1; }
+[[ -s "$KEY" ]] || { echo "Chave host ausente: $KEY" >&2; exit 1; }
+[[ -x /usr/sbin/dropbear ]] || { echo "dropbear não instalado." >&2; exit 1; }
+
+getv() {
+  local key="$1" line
+  line=$(grep -E "^${key}=" "$CONF" | tail -n1 || true)
+  printf '%s' "${line#*=}"
+}
+valid_port() { [[ "$1" =~ ^[0-9]+$ ]] && (( 10#$1 >= 1 && 10#$1 <= 65535 )); }
+valid_uint() { [[ "$1" =~ ^[0-9]+$ ]]; }
+valid_bool() { [[ "$1" == yes || "$1" == no ]]; }
+valid_ipv4() {
+  local ip="$1" IFS=. parts o
+  read -r -a parts <<< "$ip"
+  [[ ${#parts[@]} -eq 4 ]] || return 1
+  for o in "${parts[@]}"; do
+    [[ "$o" =~ ^[0-9]{1,3}$ ]] || return 1
+    (( 10#$o <= 255 )) || return 1
+  done
+}
+
+bind=$(getv DROPBEAR_BIND)
+port=$(getv DROPBEAR_PORT)
+password=$(getv DROPBEAR_PASSWORD_LOGIN)
+local_forward=$(getv DROPBEAR_LOCAL_FORWARD)
+remote_forward=$(getv DROPBEAR_REMOTE_FORWARD)
+keepalive=$(getv DROPBEAR_KEEPALIVE)
+idle=$(getv DROPBEAR_IDLE_TIMEOUT)
+max_auth=$(getv DROPBEAR_MAX_AUTH_TRIES)
+
+valid_ipv4 "$bind" || { echo "DROPBEAR_BIND inválido." >&2; exit 1; }
+valid_port "$port" || { echo "DROPBEAR_PORT inválido." >&2; exit 1; }
+valid_bool "$password" || { echo "DROPBEAR_PASSWORD_LOGIN inválido." >&2; exit 1; }
+valid_bool "$local_forward" || { echo "DROPBEAR_LOCAL_FORWARD inválido." >&2; exit 1; }
+valid_bool "$remote_forward" || { echo "DROPBEAR_REMOTE_FORWARD inválido." >&2; exit 1; }
+valid_uint "$keepalive" || { echo "DROPBEAR_KEEPALIVE inválido." >&2; exit 1; }
+valid_uint "$idle" || { echo "DROPBEAR_IDLE_TIMEOUT inválido." >&2; exit 1; }
+valid_uint "$max_auth" && (( 10#$max_auth >= 1 && 10#$max_auth <= 100 )) || { echo "DROPBEAR_MAX_AUTH_TRIES inválido." >&2; exit 1; }
+
+args=(/usr/sbin/dropbear -F -E -w -p "${bind}:${port}" -r "$KEY" -K "$keepalive" -I "$idle" -T "$max_auth")
+[[ "$password" == yes ]] || args+=(-s)
+[[ "$local_forward" == yes ]] || args+=(-j)
+[[ "$remote_forward" == yes ]] || args+=(-k)
+
+exec "${args[@]}"
