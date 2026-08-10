@@ -11,6 +11,8 @@ source "$ROOT_DIR/modules/ssh.sh"
 source "$ROOT_DIR/modules/dropbear.sh"
 source "$ROOT_DIR/modules/websocket.sh"
 source "$ROOT_DIR/modules/tls.sh"
+source "$ROOT_DIR/modules/openvpn.sh"
+source "$ROOT_DIR/modules/mux.sh"
 source "$ROOT_DIR/modules/badvpn.sh"
 source "$ROOT_DIR/modules/slowdns.sh"
 source "$ROOT_DIR/modules/users.sh"
@@ -45,10 +47,16 @@ health_check() {
   check_item "dnstt-server íntegro" sha256sum -c /var/lib/oneplus/dnstt.sha256
   check_item "Dropbear instalado pelo Ubuntu" test -x /usr/sbin/dropbear
   check_item "Stunnel instalado pelo Ubuntu" bash -c 'command -v stunnel4 >/dev/null 2>&1 || command -v stunnel >/dev/null 2>&1'
-  check_item "Proxy WebSocket Python 3" python3 -m py_compile /opt/oneplus/libexec/websocket_proxy.py
+  check_item "OpenVPN instalado pelo Ubuntu" test -x /usr/sbin/openvpn
+  check_item "Plugin PAM OpenVPN" bash -c "find /usr/lib -type f -name openvpn-plugin-auth-pam.so -print -quit | grep -q ."
+  check_item "PAM OpenVPN restrito ao OnePlus/root negado" bash -c "grep -Fq 'user ingroup oneplus-users' /etc/pam.d/oneplus-openvpn && grep -Fq 'user != root' /etc/pam.d/oneplus-openvpn"
+  check_item "sslh-select instalado pelo Ubuntu" test -x /usr/sbin/sslh-select
+  check_item "Proxy WebSocket Python 3" python3 -m py_compile /opt/oneplus/libexec/websocket_proxy.py /opt/oneplus/libexec/openvpn_manager.py
   check_item "Unidade Dropbear OnePlus" systemctl cat oneplus-dropbear.service
   check_item "Unidade WebSocket OnePlus" systemctl cat oneplus-websocket.service
   check_item "Unidade TLS OnePlus" systemctl cat oneplus-tls.service
+  check_item "Unidade OpenVPN OnePlus" systemctl cat oneplus-openvpn.service
+  check_item "Unidade Multiplexador OnePlus" systemctl cat oneplus-mux.service
   check_item "Unidade BadVPN instalada" systemctl cat oneplus-badvpn.service
   check_item "Unidade SlowDNS instalada" systemctl cat oneplus-slowdns.service
   check_item "Grupo de usuários OnePlus" getent group oneplus-users
@@ -61,6 +69,8 @@ health_check() {
   printf "Dropbear:  %b\n" "$(service_state oneplus-dropbear.service)"
   printf "WebSocket: %b\n" "$(service_state oneplus-websocket.service)"
   printf "TLS:       %b\n" "$(service_state oneplus-tls.service)"
+  printf "OpenVPN:   %b\n" "$(service_state oneplus-openvpn.service)"
+  printf "Multiplex: %b\n" "$(service_state oneplus-mux.service)"
   printf "BadVPN:    %b\n" "$(service_state oneplus-badvpn.service)"
   printf "SlowDNS:   %b\n" "$(service_state oneplus-slowdns.service)"
   printf "Usuários:  %b\n" "$(service_state oneplus-user-maintenance.timer)"
@@ -83,6 +93,8 @@ Uso:
   oneplus dropbear    Abre a gestão do Dropbear
   oneplus websocket   Abre a gestão do WebSocket
   oneplus tls         Abre a gestão TLS/Stunnel
+  oneplus openvpn     Abre a gestão OpenVPN
+  oneplus mux         Abre o multiplexador sslh
   oneplus --help      Mostra esta ajuda
 EOF2
 }
@@ -99,17 +111,21 @@ main_menu() {
     printf "Servidor: %s  |  Sessões: %s\n" "${ipaddr:-N/D}" "$users_online"
     printf "OpenSSH: %-16b Dropbear: %-16b WebSocket: %b\n" \
       "$(service_state ssh.service)" "$(service_state oneplus-dropbear.service)" "$(service_state oneplus-websocket.service)"
-    printf "TLS:     %-16b BadVPN:   %-16b SlowDNS:   %b\n\n" \
-      "$(service_state oneplus-tls.service)" "$(service_state oneplus-badvpn.service)" "$(service_state oneplus-slowdns.service)"
+    printf "TLS:     %-16b OpenVPN:  %-16b Multiplex: %b\n" \
+      "$(service_state oneplus-tls.service)" "$(service_state oneplus-openvpn.service)" "$(service_state oneplus-mux.service)"
+    printf "BadVPN:  %-16b SlowDNS:   %b\n\n" \
+      "$(service_state oneplus-badvpn.service)" "$(service_state oneplus-slowdns.service)"
     printf "1) Usuários SSH\n"
     printf "2) Sistema e diagnóstico\n"
     printf "3) OpenSSH\n"
     printf "4) Dropbear SSH\n"
     printf "5) WebSocket\n"
     printf "6) TLS / Stunnel\n"
-    printf "7) BadVPN UDPGW\n"
-    printf "8) SlowDNS / DNSTT\n"
-    printf "9) Sobre esta versão\n"
+    printf "7) OpenVPN\n"
+    printf "8) Multiplexador de portas / sslh\n"
+    printf "9) BadVPN UDPGW\n"
+    printf "10) SlowDNS / DNSTT\n"
+    printf "11) Sobre esta versão\n"
     printf "0) Sair\n\nEscolha: "
     read -r opt
     case "$opt" in
@@ -119,9 +135,11 @@ main_menu() {
       4) module_dropbear ;;
       5) module_websocket ;;
       6) module_tls ;;
-      7) module_badvpn ;;
-      8) module_slowdns ;;
-      9)
+      7) module_openvpn ;;
+      8) module_mux ;;
+      9) module_badvpn ;;
+      10) module_slowdns ;;
+      11)
         clear
         cat <<EOF2
 OnePlus ${VERSION}
@@ -138,6 +156,8 @@ Princípios:
 - Dropbear com root sempre bloqueado pelo OnePlus;
 - WebSocket com destino fixo, sem open proxy/X-Real-Host dinâmico;
 - TLS via stunnel com TLS 1.2+ e chave privada protegida;
+- OpenVPN com autenticação PAM restrita às contas oneplus-users;
+- multiplexação TCP via sslh sem modo transparente nem alteração de firewall;
 - contas SSH gerenciadas sem armazenar senhas;
 - expiração e limites aplicados apenas a contas criadas pelo OnePlus.
 EOF2
@@ -157,6 +177,8 @@ case "${1:-}" in
   dropbear) module_dropbear ;;
   websocket|ws) module_websocket ;;
   tls) module_tls ;;
+  openvpn|vpn) module_openvpn ;;
+  mux|sslh) module_mux ;;
   --help|-h) show_help ;;
   *) error "Argumento desconhecido: $1"; show_help; exit 2 ;;
 esac

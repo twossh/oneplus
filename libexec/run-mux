@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+CONF=/etc/oneplus/mux.env
+[[ -r "$CONF" ]] || { echo "Configuração ausente: $CONF" >&2; exit 1; }
+[[ -x /usr/sbin/sslh-select ]] || { echo "sslh-select não instalado." >&2; exit 1; }
+
+getv() {
+  local key="$1" line
+  line=$(grep -E "^${key}=" "$CONF" 2>/dev/null | tail -n1 || true)
+  printf '%s' "${line#*=}"
+}
+valid_port() { [[ "$1" =~ ^[0-9]+$ ]] && (( 10#$1 >= 1 && 10#$1 <= 65535 )); }
+valid_bool() { [[ "$1" == yes || "$1" == no ]]; }
+valid_ipv4() {
+  local ip="$1" IFS=. parts o
+  read -r -a parts <<< "$ip"
+  [[ ${#parts[@]} -eq 4 ]] || return 1
+  for o in "${parts[@]}"; do
+    [[ "$o" =~ ^[0-9]{1,3}$ ]] || return 1
+    (( 10#$o <= 255 )) || return 1
+  done
+}
+valid_loopback_target() {
+  local value="$1" host port
+  [[ "$value" == *:* ]] || return 1
+  host=${value%:*}; port=${value##*:}
+  valid_port "$port" || return 1
+  [[ "$host" == 127.0.0.1 || "$host" == localhost ]]
+}
+
+bind=$(getv MUX_BIND)
+port=$(getv MUX_PORT)
+timeout=$(getv MUX_TIMEOUT)
+ssh_enable=$(getv MUX_SSH_ENABLE)
+ssh_target=$(getv MUX_SSH_TARGET)
+tls_enable=$(getv MUX_TLS_ENABLE)
+tls_target=$(getv MUX_TLS_TARGET)
+openvpn_enable=$(getv MUX_OPENVPN_ENABLE)
+openvpn_target=$(getv MUX_OPENVPN_TARGET)
+http_enable=$(getv MUX_HTTP_ENABLE)
+http_target=$(getv MUX_HTTP_TARGET)
+timeout_proto=$(getv MUX_TIMEOUT_PROTOCOL)
+
+valid_ipv4 "$bind" || { echo "MUX_BIND inválido." >&2; exit 1; }
+valid_port "$port" || { echo "MUX_PORT inválido." >&2; exit 1; }
+[[ "$timeout" =~ ^[0-9]+$ ]] && (( 10#$timeout >= 1 && 10#$timeout <= 30 )) || { echo "MUX_TIMEOUT inválido (1..30)." >&2; exit 1; }
+
+count=0
+args=(/usr/sbin/sslh-select -f -n --listen "${bind}:${port}" -t "$timeout")
+for p in ssh tls openvpn http; do
+  enable_var="${p}_enable"
+  target_var="${p}_target"
+  enable=${!enable_var}
+  target=${!target_var}
+  valid_bool "$enable" || { echo "MUX_${p^^}_ENABLE inválido." >&2; exit 1; }
+  valid_loopback_target "$target" || { echo "MUX_${p^^}_TARGET deve apontar somente para loopback." >&2; exit 1; }
+  if [[ "$enable" == yes ]]; then
+    args+=("--${p}" "$target")
+    ((count+=1))
+  fi
+done
+(( count >= 2 )) || { echo "Habilite pelo menos dois protocolos no multiplexador." >&2; exit 1; }
+
+case "$timeout_proto" in
+  ssh) [[ "$ssh_enable" == yes ]] ;;
+  tls) [[ "$tls_enable" == yes ]] ;;
+  openvpn) [[ "$openvpn_enable" == yes ]] ;;
+  http) [[ "$http_enable" == yes ]] ;;
+  *) false ;;
+esac || { echo "MUX_TIMEOUT_PROTOCOL deve ser um protocolo habilitado." >&2; exit 1; }
+
+args+=(--on-timeout "$timeout_proto")
+exec "${args[@]}"

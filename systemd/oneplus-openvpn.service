@@ -1,0 +1,26 @@
+[Unit]
+Description=OnePlus OpenVPN server
+After=network-online.target systemd-user-sessions.service
+Wants=network-online.target
+ConditionPathExists=/dev/net/tun
+
+[Service]
+Type=simple
+ExecStart=/opt/oneplus/libexec/run-openvpn
+Restart=on-failure
+RestartSec=3s
+UMask=0077
+RuntimeDirectory=oneplus-openvpn
+RuntimeDirectoryMode=0700
+LimitNOFILE=65535
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

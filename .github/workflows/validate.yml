@@ -24,6 +24,12 @@ jobs:
       - name: User module tests
         run: sudo bash scripts/test-users.sh
 
+      - name: OpenVPN module tests
+        run: bash scripts/test-openvpn.sh
+
+      - name: Multiplexer module tests
+        run: bash scripts/test-mux.sh
+
       - name: WebSocket integration tests
         run: python3 scripts/test-websocket.py
 
@@ -33,7 +39,7 @@ jobs:
             echo '/opt/oneplus já existe no runner; não é seguro sobrescrever.' >&2
             exit 1
           fi
-          for u in oneplus-ws oneplus-tls oneplus-badvpn oneplus-dnstt; do
+          for u in oneplus-ws oneplus-tls oneplus-badvpn oneplus-dnstt oneplus-mux; do
             sudo groupadd --system "$u" 2>/dev/null || true
             id -u "$u" >/dev/null 2>&1 || sudo useradd --system --gid "$u" --no-create-home --shell /usr/sbin/nologin "$u"
           done

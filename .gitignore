@@ -20,6 +20,7 @@ __pycache__/
 *.pem
 *.p12
 *.pfx
+*.ovpn
 .env
 .env.*
 !.env.example

@@ -22,19 +22,21 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 # Dropbear e stunnel ficam no componente Universe em Ubuntu. Imagens mínimas
 # podem não trazê-lo habilitado, então fazemos um fallback controlado.
-if ! apt-cache show dropbear-bin >/dev/null 2>&1 || ! apt-cache show stunnel4 >/dev/null 2>&1; then
+if ! apt-cache show dropbear-bin >/dev/null 2>&1 || ! apt-cache show stunnel4 >/dev/null 2>&1 || ! apt-cache show sslh >/dev/null 2>&1; then
   apt-get install -y --no-install-recommends software-properties-common
   add-apt-repository -y universe
   apt-get update
 fi
 apt-get install -y --no-install-recommends \
   ca-certificates curl git build-essential \
-  openssh-server dropbear-bin stunnel4 python3 \
+  openssh-server dropbear-bin stunnel4 openvpn sslh python3 \
   iproute2 procps util-linux passwd libpam-modules openssl \
   rsync dnsutils lsof less
 
 info "Validando componentes Python após instalar dependências..."
-python3 -m py_compile "$SELF_DIR/libexec/websocket_proxy.py" "$SELF_DIR/scripts/test-websocket.py"
+PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/oneplus-install-pycache.$$" python3 -m py_compile \
+  "$SELF_DIR/libexec/websocket_proxy.py" "$SELF_DIR/libexec/openvpn_manager.py" "$SELF_DIR/scripts/test-websocket.py"
+rm -rf -- "${TMPDIR:-/tmp}/oneplus-install-pycache.$$" 2>/dev/null || true
 
 # dnstt v1.20260501.0 requer Go 1.24+.
 if apt-cache show golang-1.24-go >/dev/null 2>&1; then
@@ -46,6 +48,7 @@ fi
 install -d -m 0755 /opt/oneplus /usr/local/lib/oneplus/bin /etc/oneplus /var/lib/oneplus
 install -d -m 0700 /var/lib/oneplus/users
 install -d -m 0700 -o root -g root /etc/oneplus/dropbear
+install -d -m 0700 -o root -g root /etc/oneplus/openvpn /etc/oneplus/openvpn/pki
 rsync -a --delete \
   --exclude '.git' \
   --exclude '.github' \
@@ -71,6 +74,7 @@ ensure_service_account oneplus-badvpn
 ensure_service_account oneplus-dnstt
 ensure_service_account oneplus-ws
 ensure_service_account oneplus-tls
+ensure_service_account oneplus-mux
 if ! getent group oneplus-users >/dev/null; then
   groupadd --system oneplus-users
 fi
@@ -82,6 +86,8 @@ fi
 [[ -e /etc/oneplus/dropbear.env ]] || install -m 0640 -o root -g root /opt/oneplus/defaults/dropbear.env /etc/oneplus/dropbear.env
 [[ -e /etc/oneplus/websocket.env ]] || install -m 0640 -o root -g oneplus-ws /opt/oneplus/defaults/websocket.env /etc/oneplus/websocket.env
 [[ -e /etc/oneplus/tls.env ]] || install -m 0640 -o root -g oneplus-tls /opt/oneplus/defaults/tls.env /etc/oneplus/tls.env
+[[ -e /etc/oneplus/openvpn.env ]] || install -m 0640 -o root -g root /opt/oneplus/defaults/openvpn.env /etc/oneplus/openvpn.env
+[[ -e /etc/oneplus/mux.env ]] || install -m 0640 -o root -g oneplus-mux /opt/oneplus/defaults/mux.env /etc/oneplus/mux.env
 chown root:root /etc/oneplus/oneplus.conf && chmod 0644 /etc/oneplus/oneplus.conf
 chown root:oneplus-badvpn /etc/oneplus/badvpn.env && chmod 0640 /etc/oneplus/badvpn.env
 chown root:oneplus-dnstt /etc/oneplus/slowdns.env && chmod 0640 /etc/oneplus/slowdns.env
@@ -89,8 +95,11 @@ chown root:root /etc/oneplus/users.conf && chmod 0644 /etc/oneplus/users.conf
 chown root:root /etc/oneplus/dropbear.env && chmod 0640 /etc/oneplus/dropbear.env
 chown root:oneplus-ws /etc/oneplus/websocket.env && chmod 0640 /etc/oneplus/websocket.env
 chown root:oneplus-tls /etc/oneplus/tls.env && chmod 0640 /etc/oneplus/tls.env
+chown root:root /etc/oneplus/openvpn.env && chmod 0640 /etc/oneplus/openvpn.env
+chown root:oneplus-mux /etc/oneplus/mux.env && chmod 0640 /etc/oneplus/mux.env
 install -d -m 0750 -o root -g oneplus-dnstt /etc/oneplus/slowdns
 install -d -m 0750 -o root -g oneplus-tls /etc/oneplus/tls
+install -d -m 0700 -o root -g root /etc/oneplus/openvpn /etc/oneplus/openvpn/pki
 
 install -m 0644 /opt/oneplus/systemd/oneplus-badvpn.service /etc/systemd/system/oneplus-badvpn.service
 install -m 0644 /opt/oneplus/systemd/oneplus-slowdns.service /etc/systemd/system/oneplus-slowdns.service
@@ -99,6 +108,8 @@ install -m 0644 /opt/oneplus/systemd/oneplus-user-maintenance.timer /etc/systemd
 install -m 0644 /opt/oneplus/systemd/oneplus-dropbear.service /etc/systemd/system/oneplus-dropbear.service
 install -m 0644 /opt/oneplus/systemd/oneplus-websocket.service /etc/systemd/system/oneplus-websocket.service
 install -m 0644 /opt/oneplus/systemd/oneplus-tls.service /etc/systemd/system/oneplus-tls.service
+install -m 0644 /opt/oneplus/systemd/oneplus-openvpn.service /etc/systemd/system/oneplus-openvpn.service
+install -m 0644 /opt/oneplus/systemd/oneplus-mux.service /etc/systemd/system/oneplus-mux.service
 ln -sfn /opt/oneplus/bin/oneplus /usr/local/bin/oneplus
 
 if command -v systemd-analyze >/dev/null 2>&1; then
@@ -110,10 +121,13 @@ if command -v systemd-analyze >/dev/null 2>&1; then
     /etc/systemd/system/oneplus-user-maintenance.timer \
     /etc/systemd/system/oneplus-dropbear.service \
     /etc/systemd/system/oneplus-websocket.service \
-    /etc/systemd/system/oneplus-tls.service
+    /etc/systemd/system/oneplus-tls.service \
+    /etc/systemd/system/oneplus-openvpn.service \
+    /etc/systemd/system/oneplus-mux.service
 fi
 systemctl daemon-reload
 /opt/oneplus/modules/users.sh init
+/opt/oneplus/modules/openvpn.sh init
 
 info "Instalando BadVPN UDPGW (compatibilidade SSH UDP)..."
 /opt/oneplus/modules/badvpn.sh install-binary
@@ -138,5 +152,5 @@ systemctl enable --now oneplus-user-maintenance.timer
 printf "\n%bInstalação concluída.%b\n" "$C_GREEN" "$C_RESET"
 printf "Execute: %boneplus%b\n" "$C_BOLD" "$C_RESET"
 printf "Verifique: %boneplus --check%b\n" "$C_BOLD" "$C_RESET"
-printf "Dropbear, WebSocket, TLS, BadVPN e SlowDNS permanecem desabilitados até serem configurados no menu.\n"
+printf "Dropbear, WebSocket, TLS, OpenVPN, Multiplexador, BadVPN e SlowDNS permanecem desabilitados até serem configurados no menu.\n"
 printf "A manutenção segura de expiração/limites de usuários está ativa via systemd timer.\n"

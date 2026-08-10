@@ -9,48 +9,57 @@
 - [x] systemd e journald
 
 ## Fase 2 — Usuários SSH
-- [x] criar usuário
-- [x] remover usuário
-- [x] alterar senha sem armazená-la
+- [x] criar/remover/editar usuário
+- [x] senha sem armazenamento em texto puro
 - [x] expiração por data/dias
 - [x] usuário teste/temporário
-- [x] limite simultâneo de conexões
-- [x] monitor de conexões
-- [x] tratamento automático seguro de expirados via systemd timer
-- [x] remoção automática de contas temporárias expiradas
+- [x] limite simultâneo de conexões SSH
+- [x] monitor OpenSSH + Dropbear
+- [x] expiração automática segura via systemd timer
 - [x] isolamento por UID original + grupo OnePlus
 
 ## Fase 2.1 — Validação real
-- [ ] testar instalação limpa em Ubuntu 24.04 LTS
-- [ ] testar reinstalação/upgrade sobre v0.2.0
-- [ ] validar limites com shell interativo, SFTP e túnel `ssh -N`
-- [ ] validar limite combinado OpenSSH + Dropbear
-- [ ] validar expiração de conta teste em ambiente real
-- [ ] validar atualização após reboot
+- [ ] instalação limpa Ubuntu 24.04 LTS
+- [ ] upgrade sobre release anterior
+- [ ] shell interativo, SFTP e `ssh -N`
+- [ ] limite combinado OpenSSH + Dropbear
+- [ ] expiração de conta teste
+- [ ] reboot
 
 ## Fase 3 — Conectividade
-- [x] Dropbear usando pacote oficial Ubuntu e serviço próprio
+- [x] Dropbear oficial Ubuntu e serviço próprio
 - [x] TLS/Stunnel opcional com TLS 1.2+
 - [x] proxy WebSocket Python 3 com upstream fixo
-- [x] rollback por conflito/falha de serviço nos novos módulos
-- [x] teste de integração RFC6455/legacy do WebSocket
-- [ ] OpenVPN opcional
-- [ ] multiplexação de portas sem hacks destrutivos
+- [x] OpenVPN opcional usando pacote Ubuntu
+- [x] OpenVPN autenticado por PAM somente para `oneplus-users`
+- [x] PKI de servidor local + `tls-crypt`
+- [x] exportação de perfil `.ovpn`
+- [x] interface de gerenciamento OpenVPN via Unix socket root-only
+- [x] multiplexação de portas TCP via sslh sem modo transparente
+- [x] backends do multiplexador restritos a loopback
+- [x] rollback por conflito/falha de serviço
+- [x] testes estáticos/integração dos módulos
 
 ## Fase 3.1 — Validação real
-- [ ] testar login real via Dropbear
-- [ ] testar senha e chave pública via Dropbear
-- [ ] testar encaminhamento local e bloqueio de `-R`
-- [ ] testar WebSocket RFC6455 com cliente real
-- [ ] testar modo legacy somente onde houver necessidade
-- [ ] testar TLS/Stunnel com certificado público
-- [ ] testar TLS autoassinado com pin explícito
-- [ ] validar concorrência e consumo de recursos
-- [ ] validar reboot com cada combinação de serviços habilitados
+- [ ] login real via Dropbear com senha e chave
+- [ ] encaminhamento local e bloqueio de `-R`
+- [ ] WebSocket RFC6455 com cliente real
+- [ ] TLS/Stunnel com certificado público e autoassinado/pin
+- [ ] autenticação OpenVPN com usuário OnePlus real
+- [ ] validar usuário bloqueado/expirado sendo recusado pelo PAM
+- [ ] validar desconexão OpenVPN no bloqueio/expiração
+- [ ] testar perfil `.ovpn` em Linux/Windows/Android/iOS
+- [ ] OpenVPN TCP atrás do sslh em porta 443
+- [ ] combinar SSH + TLS + OpenVPN + HTTP/WS no sslh
+- [ ] validar concorrência/consumo de recursos
+- [ ] validar reboot com combinações de serviços
 
-## Fase 4 — Operação
-- [ ] backup/restauração seguro
+## Fase 4 — Operação e segurança do host
+- [ ] backup/restauração seguro e versionado
 - [ ] atualização assinada/versionada do OnePlus
-- [ ] auditoria de portas e firewall sem limpeza global de regras
+- [ ] auditoria de portas
+- [ ] firewall/nftables em tabela própria, sem limpar regras existentes
+- [ ] NAT/masquerade OpenVPN opcional com rollback
 - [ ] relatórios de tráfego/sessões
 - [ ] diagnóstico e reparo
+- [ ] rotação/backup controlado de PKI e chaves

@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.4.0 — 2026-08-10
+- Concluída a Fase 3 com OpenVPN opcional e multiplexação TCP via sslh.
+- OpenVPN usa o pacote oficial do Ubuntu, sem binário externo ou compilação paralela.
+- Adicionada CA interna e certificado do servidor gerados localmente com RSA 3072; a chave privada da CA nunca é exportada.
+- Adicionado `tls-crypt`, TLS mínimo 1.2, AEAD moderno e compressão desabilitada.
+- Autenticação OpenVPN integrada ao PAM e restrita ao grupo `oneplus-users`; senhas continuam fora do armazenamento OnePlus.
+- Substituída a opção antiga `client-cert-not-required` pela política atual `verify-client-cert none` + `username-as-common-name`.
+- Adicionada exportação de perfil `.ovpn` com CA pública e `tls-crypt`, protegido com modo 0600.
+- Interface de gerenciamento OpenVPN usa somente Unix socket root-only, nunca uma porta TCP.
+- Bloqueio, expiração e remoção de usuário agora tentam encerrar também sua sessão OpenVPN.
+- OpenVPN não cria NAT, `redirect-gateway`, masquerade ou regras de firewall automaticamente nesta fase.
+- Adicionado multiplexador `sslh-select` em `oneplus-mux.service`.
+- Multiplexador reconhece SSH, TLS, OpenVPN TCP e HTTP/WebSocket em uma porta TCP compartilhada.
+- Todos os backends do multiplexador são obrigatoriamente loopback.
+- Modo transparente do sslh é proibido para evitar dependência de hacks/regras automáticas de firewall.
+- Multiplexador roda como usuário dedicado `oneplus-mux` com somente `CAP_NET_BIND_SERVICE`.
+- Configuração do multiplexador exige pelo menos dois protocolos e possui detecção de conflito/rollback.
+- Timeout padrão do multiplexador ajustado para 5 segundos para melhorar detecção de OpenVPN TCP.
+- Documentado explicitamente o trade-off do modo OpenVPN usuário/senha sem certificado cliente individual.
+- `oneplus --check` agora confirma também a regra PAM que nega login de root no OpenVPN.
+- Adicionados comandos `oneplus openvpn` e `oneplus mux`.
+- `oneplus --check`, instalador, desinstalador e menu atualizados para OpenVPN/sslh.
+- Adicionados testes `test-openvpn.sh`, `test-mux.sh` e validações estáticas específicas.
+- GitHub Actions ampliado para testar os novos módulos e unidades systemd.
+
 ## 0.3.0 — 2026-08-10
 - Adicionada Fase 3 de conectividade, mantendo administração exclusivamente pelo terminal.
 - Adicionado Dropbear via `dropbear-bin` do Ubuntu, executado por unidade `oneplus-dropbear.service` própria.

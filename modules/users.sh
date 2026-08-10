@@ -164,6 +164,12 @@ terminate_user_sessions() {
   if pgrep -u "$uid" >/dev/null 2>&1; then
     pkill -KILL -u "$uid" 2>/dev/null || true
   fi
+  # Se o OpenVPN OnePlus estiver ativo, username-as-common-name permite
+  # encerrar também a sessão VPN desse usuário sem expor a interface de
+  # gerenciamento em TCP. Falha/ausência do OpenVPN não impede a operação SSH.
+  if [[ -S /run/oneplus-openvpn/management.sock && -x /opt/oneplus/libexec/openvpn_manager.py ]]; then
+    /opt/oneplus/libexec/openvpn_manager.py kill-user "$user" >/dev/null 2>&1 || true
+  fi
 }
 
 apply_connection_limit() {

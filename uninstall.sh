@@ -9,12 +9,13 @@ printf "Digite REMOVER para continuar: "
 read -r confirm
 [[ "$confirm" == "REMOVER" ]] || { info "Cancelado."; exit 0; }
 
-systemctl disable --now oneplus-badvpn.service oneplus-slowdns.service oneplus-dropbear.service oneplus-websocket.service oneplus-tls.service oneplus-user-maintenance.timer 2>/dev/null || true
+systemctl disable --now oneplus-badvpn.service oneplus-slowdns.service oneplus-dropbear.service oneplus-websocket.service oneplus-tls.service oneplus-openvpn.service oneplus-mux.service oneplus-user-maintenance.timer 2>/dev/null || true
 systemctl stop oneplus-user-maintenance.service 2>/dev/null || true
 rm -f /etc/systemd/system/oneplus-badvpn.service /etc/systemd/system/oneplus-slowdns.service \
   /etc/systemd/system/oneplus-dropbear.service /etc/systemd/system/oneplus-websocket.service /etc/systemd/system/oneplus-tls.service \
+  /etc/systemd/system/oneplus-openvpn.service /etc/systemd/system/oneplus-mux.service \
   /etc/systemd/system/oneplus-user-maintenance.service /etc/systemd/system/oneplus-user-maintenance.timer
-rm -f /etc/security/limits.d/90-oneplus.conf
+rm -f /etc/security/limits.d/90-oneplus.conf /etc/pam.d/oneplus-openvpn
 rm -f /usr/local/bin/oneplus
 rm -rf /opt/oneplus /usr/local/lib/oneplus
 if [[ -e /etc/ssh/sshd_config.d/60-oneplus.conf ]]; then

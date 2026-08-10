@@ -8,12 +8,12 @@ fail() { printf '[ERRO] %s\n' "$*" >&2; FAILED=1; }
 ok()   { printf '[OK] %s\n' "$*"; }
 
 required=(
-  VERSION README.md CHANGELOG.md setup.sh install.sh uninstall.sh scripts/test-users.sh
+  VERSION README.md CHANGELOG.md setup.sh install.sh uninstall.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh
   bin/oneplus lib/common.sh lib/os.sh
-  modules/system.sh modules/ssh.sh modules/dropbear.sh modules/websocket.sh modules/tls.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh
-  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/websocket_proxy.py
-  defaults/oneplus.conf defaults/badvpn.env defaults/slowdns.env defaults/users.conf defaults/dropbear.env defaults/websocket.env defaults/tls.env
-  systemd/oneplus-badvpn.service systemd/oneplus-slowdns.service systemd/oneplus-dropbear.service systemd/oneplus-websocket.service systemd/oneplus-tls.service
+  modules/system.sh modules/ssh.sh modules/dropbear.sh modules/websocket.sh modules/tls.sh modules/openvpn.sh modules/mux.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh
+  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-mux libexec/websocket_proxy.py libexec/openvpn_manager.py
+  defaults/oneplus.conf defaults/badvpn.env defaults/slowdns.env defaults/users.conf defaults/dropbear.env defaults/websocket.env defaults/tls.env defaults/openvpn.env defaults/mux.env
+  systemd/oneplus-badvpn.service systemd/oneplus-slowdns.service systemd/oneplus-dropbear.service systemd/oneplus-websocket.service systemd/oneplus-tls.service systemd/oneplus-openvpn.service systemd/oneplus-mux.service
   systemd/oneplus-user-maintenance.service systemd/oneplus-user-maintenance.timer
   scripts/test-websocket.py
 )
@@ -30,7 +30,7 @@ mapfile -t shell_files < <(
   {
     find "$ROOT_DIR" -type f -name '*.sh' -not -path '*/.git/*' -print
     printf '%s\n' "$ROOT_DIR/bin/oneplus" "$ROOT_DIR/libexec/run-badvpn" "$ROOT_DIR/libexec/run-slowdns" "$ROOT_DIR/libexec/run-user-maintenance" \
-      "$ROOT_DIR/libexec/run-dropbear" "$ROOT_DIR/libexec/run-websocket" "$ROOT_DIR/libexec/run-tls"
+      "$ROOT_DIR/libexec/run-dropbear" "$ROOT_DIR/libexec/run-websocket" "$ROOT_DIR/libexec/run-tls" "$ROOT_DIR/libexec/run-openvpn" "$ROOT_DIR/libexec/run-mux"
   } | sort -u
 )
 
@@ -46,9 +46,9 @@ done
 (( FAILED == 0 )) && ok "Sintaxe Bash e finais de linha validados."
 
 executables=(setup.sh install.sh uninstall.sh bin/oneplus lib/common.sh lib/os.sh \
-  modules/system.sh modules/ssh.sh modules/dropbear.sh modules/websocket.sh modules/tls.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh \
-  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/websocket_proxy.py \
-  scripts/validate.sh scripts/test-users.sh scripts/test-websocket.py)
+  modules/system.sh modules/ssh.sh modules/dropbear.sh modules/websocket.sh modules/tls.sh modules/openvpn.sh modules/mux.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh \
+  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-mux libexec/websocket_proxy.py libexec/openvpn_manager.py \
+  scripts/validate.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-websocket.py)
 for rel in "${executables[@]}"; do
   [[ -x "$ROOT_DIR/$rel" ]] || fail "Permissão executável ausente: $rel"
 done
@@ -91,7 +91,7 @@ fi
 
 
 if command -v python3 >/dev/null 2>&1; then
-  if ! PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/oneplus-pycache.$$" python3 -m py_compile "$ROOT_DIR/libexec/websocket_proxy.py" "$ROOT_DIR/scripts/test-websocket.py"; then
+  if ! PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/oneplus-pycache.$$" python3 -m py_compile "$ROOT_DIR/libexec/websocket_proxy.py" "$ROOT_DIR/libexec/openvpn_manager.py" "$ROOT_DIR/scripts/test-websocket.py"; then
     fail "Erro de sintaxe Python no módulo WebSocket."
   else
     ok "Sintaxe Python do WebSocket validada."
@@ -132,6 +132,53 @@ if ! grep -Fq 'User=oneplus-ws' "$ROOT_DIR/systemd/oneplus-websocket.service" ||
   fail "WebSocket/TLS devem executar com usuários de serviço dedicados."
 else
   ok "WebSocket e TLS usam usuários de serviço dedicados."
+fi
+
+
+# OpenVPN: autenticação moderna por PAM, sem certificado cliente obrigatório e sem NAT automático.
+if ! grep -Fq 'verify-client-cert none' "$ROOT_DIR/libexec/run-openvpn" ||    ! grep -Fq 'username-as-common-name' "$ROOT_DIR/libexec/run-openvpn" ||    ! grep -Fq 'plugin ${plugin} oneplus-openvpn' "$ROOT_DIR/libexec/run-openvpn"; then
+  fail "OpenVPN não contém a política de autenticação PAM esperada."
+else
+  ok "OpenVPN usa autenticação PAM/username moderna."
+fi
+if grep -Fq 'client-cert-not-required' "$ROOT_DIR/libexec/run-openvpn" || grep -Fq 'duplicate-cn' "$ROOT_DIR/libexec/run-openvpn"; then
+  fail "OpenVPN contém opção removida/incompatível ou duplicate-cn."
+fi
+if grep -RIn --exclude='validate.sh' -E '(^|[[:space:]])redirect-gateway([[:space:]]|$)|MASQUERADE|nft[[:space:]].*masquerade' "$ROOT_DIR/modules/openvpn.sh" "$ROOT_DIR/libexec/run-openvpn" >/dev/null 2>&1; then
+  fail "OpenVPN da fase 3 não deve alterar NAT/full-tunnel automaticamente."
+else
+  ok "OpenVPN não altera NAT/firewall automaticamente."
+fi
+if ! grep -Fq 'user ingroup oneplus-users' "$ROOT_DIR/modules/openvpn.sh" || \
+   ! grep -Fq 'user != root' "$ROOT_DIR/modules/openvpn.sh"; then
+  fail "PAM OpenVPN deve negar root e restringir autenticação ao grupo oneplus-users."
+else
+  ok "PAM OpenVPN nega root e restringe acesso às contas gerenciadas pelo OnePlus."
+fi
+if ! grep -Fq 'management ${RUNTIME_DIR}/management.sock unix' "$ROOT_DIR/libexec/run-openvpn" ||    ! grep -Fq 'management-client-user root' "$ROOT_DIR/libexec/run-openvpn"; then
+  fail "Interface de gerenciamento OpenVPN deve ser UNIX socket restrito a root."
+else
+  ok "Gerenciamento OpenVPN limitado a UNIX socket local/root."
+fi
+if grep -Fq 'cat "$OPENVPN_CA_KEY"' "$ROOT_DIR/modules/openvpn.sh"; then
+  fail "A chave privada da CA OpenVPN não pode ser exportada para perfis cliente."
+else
+  ok "Exportação OpenVPN não inclui a chave privada da CA."
+fi
+
+# sslh: multiplexação somente TCP, backends loopback e sem modo transparente/firewall.
+if grep -Fq -- '--transparent' "$ROOT_DIR/libexec/run-mux"; then
+  fail "Multiplexador OnePlus não pode usar modo transparente."
+fi
+if ! grep -Fq 'valid_loopback_target' "$ROOT_DIR/libexec/run-mux" ||    ! grep -Fq '[[ "$host" == 127.0.0.1 || "$host" == localhost ]]' "$ROOT_DIR/libexec/run-mux"; then
+  fail "Multiplexador deve restringir todos os backends ao loopback."
+else
+  ok "Multiplexador sslh usa somente backends loopback."
+fi
+if ! grep -Fq 'User=oneplus-mux' "$ROOT_DIR/systemd/oneplus-mux.service" ||    ! grep -Fq 'CapabilityBoundingSet=CAP_NET_BIND_SERVICE' "$ROOT_DIR/systemd/oneplus-mux.service"; then
+  fail "Multiplexador deve executar com usuário dedicado e somente capability de bind privilegiado."
+else
+  ok "Multiplexador usa usuário dedicado e capability mínima."
 fi
 
 # Integridade dos protocolos compilados.
