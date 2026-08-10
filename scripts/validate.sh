@@ -8,10 +8,10 @@ fail() { printf '[ERRO] %s\n' "$*" >&2; FAILED=1; }
 ok()   { printf '[OK] %s\n' "$*"; }
 
 required=(
-  VERSION README.md CHANGELOG.md setup.sh install.sh uninstall.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-operations.sh scripts/release-sign.sh
+  VERSION README.md CHANGELOG.md docs/RELEASES.md release/README.md setup.sh install.sh uninstall.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-operations.sh scripts/test-release.py scripts/fix-permissions.sh scripts/git-fix-modes.sh scripts/release-keygen.sh scripts/release-prepare.sh scripts/release-sign.sh
   bin/oneplus lib/common.sh lib/os.sh
   modules/system.sh modules/ssh.sh modules/dropbear.sh modules/websocket.sh modules/tls.sh modules/openvpn.sh modules/mux.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh modules/firewall.sh modules/backup.sh modules/reports.sh modules/diagnostics.sh modules/update.sh
-  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-mux libexec/run-firewall libexec/websocket_proxy.py libexec/openvpn_manager.py
+  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-mux libexec/run-firewall libexec/websocket_proxy.py libexec/openvpn_manager.py libexec/release_verify.py
   defaults/oneplus.conf defaults/badvpn.env defaults/slowdns.env defaults/users.conf defaults/dropbear.env defaults/websocket.env defaults/tls.env defaults/openvpn.env defaults/mux.env defaults/firewall.env
   systemd/oneplus-badvpn.service systemd/oneplus-slowdns.service systemd/oneplus-dropbear.service systemd/oneplus-websocket.service systemd/oneplus-tls.service systemd/oneplus-openvpn.service systemd/oneplus-mux.service systemd/oneplus-firewall.service
   systemd/oneplus-user-maintenance.service systemd/oneplus-user-maintenance.timer
@@ -47,8 +47,8 @@ done
 
 executables=(setup.sh install.sh uninstall.sh bin/oneplus lib/common.sh lib/os.sh \
   modules/system.sh modules/ssh.sh modules/dropbear.sh modules/websocket.sh modules/tls.sh modules/openvpn.sh modules/mux.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh modules/firewall.sh modules/backup.sh modules/reports.sh modules/diagnostics.sh modules/update.sh \
-  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-mux libexec/run-firewall libexec/websocket_proxy.py libexec/openvpn_manager.py \
-  scripts/validate.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-operations.sh scripts/release-sign.sh scripts/test-websocket.py)
+  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-mux libexec/run-firewall libexec/websocket_proxy.py libexec/openvpn_manager.py libexec/release_verify.py \
+  scripts/validate.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-operations.sh scripts/test-release.py scripts/fix-permissions.sh scripts/git-fix-modes.sh scripts/release-keygen.sh scripts/release-prepare.sh scripts/release-sign.sh scripts/test-websocket.py)
 for rel in "${executables[@]}"; do
   [[ -x "$ROOT_DIR/$rel" ]] || fail "Permissão executável ausente: $rel"
 done
@@ -76,6 +76,25 @@ else
   ok "Nenhum artefato Python compilado encontrado."
 fi
 
+bad_name=0
+while IFS= read -r -d '' f; do
+  rel=${f#"$ROOT_DIR/"}
+  [[ "$rel" =~ ^[A-Za-z0-9._/-]+$ ]] || { fail "Nome de arquivo/diretório não permitido na release: $rel"; bad_name=1; }
+done < <(find "$ROOT_DIR" -path "$ROOT_DIR/.git" -prune -o -print0)
+(( bad_name == 0 )) && ok "Nomes de caminhos compatíveis com o manifesto de release."
+
+if find "$ROOT_DIR" -path "$ROOT_DIR/.git" -prune -o -type l -print -quit | grep -q .; then
+  fail "Links simbólicos não são permitidos no repositório OnePlus."
+else
+  ok "Nenhum link simbólico encontrado na árvore do projeto."
+fi
+
+if find "$ROOT_DIR" -path "$ROOT_DIR/.git" -prune -o -type f -perm /6000 -print -quit | grep -q .; then
+  fail "Arquivo com setuid/setgid não é permitido no repositório."
+else
+  ok "Nenhum bit setuid/setgid encontrado."
+fi
+
 if grep -RIl --exclude-dir=.git --exclude='validate.sh' -- '-----BEGIN .*PRIVATE KEY-----' "$ROOT_DIR" | grep -q .; then
   fail "Material de chave privada encontrado no repositório."
 else
@@ -91,10 +110,10 @@ fi
 
 
 if command -v python3 >/dev/null 2>&1; then
-  if ! PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/oneplus-pycache.$$" python3 -m py_compile "$ROOT_DIR/libexec/websocket_proxy.py" "$ROOT_DIR/libexec/openvpn_manager.py" "$ROOT_DIR/scripts/test-websocket.py"; then
-    fail "Erro de sintaxe Python no módulo WebSocket."
+  if ! PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/oneplus-pycache.$$" python3 -m py_compile "$ROOT_DIR/libexec/websocket_proxy.py" "$ROOT_DIR/libexec/openvpn_manager.py" "$ROOT_DIR/libexec/release_verify.py" "$ROOT_DIR/scripts/test-websocket.py" "$ROOT_DIR/scripts/test-release.py"; then
+    fail "Erro de sintaxe Python em componente OnePlus."
   else
-    ok "Sintaxe Python do WebSocket validada."
+    ok "Sintaxe Python dos componentes validada."
   fi
   rm -rf -- "${TMPDIR:-/tmp}/oneplus-pycache.$$" 2>/dev/null || true
 else
@@ -263,6 +282,23 @@ if ! grep -Eq '^DEFAULT_CONNECTION_LIMIT=[0-9]+$' "$ROOT_DIR/defaults/users.conf
 fi
 if ! grep -Eq '^DEFAULT_TEST_EXPIRE_ACTION=(lock|delete|delete-home)$' "$ROOT_DIR/defaults/users.conf"; then
   fail "DEFAULT_TEST_EXPIRE_ACTION inválido."
+fi
+
+# Cadeia de release v0.5.1+: pacote assinado, extração segura e chave privada fora do repositório.
+if ! grep -Fq 'ONEPLUS_UPDATE_RELEASE_BASE="https://github.com/twossh/oneplus/releases/download"' "$ROOT_DIR/modules/update.sh"; then
+  fail "Atualizador não está fixado no canal GitHub Releases."
+fi
+if ! grep -Fq 'release_verify.py extract' "$ROOT_DIR/modules/update.sh"; then
+  fail "Atualizador não usa extração segura de release."
+fi
+if ! grep -Fq 'tipo de entrada proibido' "$ROOT_DIR/libexec/release_verify.py"; then
+  fail "Validador de release não bloqueia tipos especiais."
+fi
+if ! grep -Fq 'A chave privada NÃO deve ser copiada' "$ROOT_DIR/scripts/release-keygen.sh"; then
+  fail "Gerador de chave não documenta isolamento da chave privada."
+fi
+if ! grep -Fq 'A chave privada está dentro do repositório' "$ROOT_DIR/scripts/release-prepare.sh"; then
+  fail "Preparador de release não bloqueia chave privada dentro do repositório."
 fi
 
 if [[ "$FAILED" -ne 0 ]]; then

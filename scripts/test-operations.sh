@@ -26,13 +26,17 @@ grep -Fq 't!="-" && t!="d"' "$ROOT_DIR/modules/backup.sh" || fail "Restauração
 grep -Fq 'não é uma conta OnePlus validada' "$ROOT_DIR/modules/backup.sh" || fail "Restauração pode alterar conta externa preexistente."
 ok "Backup seguro validado."
 
-# Update: assinatura antes do install.sh.
+# Update: GitHub Release assinada, extração segura e assinatura antes do install.sh.
 line_verify=$(grep -n 'verify_release_tree "$src" "$tag"' "$ROOT_DIR/modules/update.sh" | head -1 | cut -d: -f1)
 line_install=$(grep -n 'bash "$src/install.sh"' "$ROOT_DIR/modules/update.sh" | head -1 | cut -d: -f1)
 [[ "$line_verify" =~ ^[0-9]+$ && "$line_install" =~ ^[0-9]+$ && "$line_verify" -lt "$line_install" ]] || fail "Instalador pode rodar antes da verificação assinada."
-grep -Fq 'minisign -Vm' "$ROOT_DIR/modules/update.sh" || fail "Verificação minisign ausente."
-grep -Fq 'sha256sum -c release/SHA256SUMS' "$ROOT_DIR/modules/update.sh" || fail "Verificação SHA-256 ausente."
-ok "Atualização fail-closed validada."
+grep -Fq 'verify_external_release_assets' "$ROOT_DIR/modules/update.sh" || fail "Verificação externa de assets ausente."
+grep -Fq 'release_verify.py extract' "$ROOT_DIR/modules/update.sh" || fail "Extração segura de release ausente."
+grep -Fq 'minisign -Vm' "$ROOT_DIR/modules/update.sh" || fail "Verificação Minisign ausente."
+grep -Fq 'sha256sum -c release/SHA256SUMS' "$ROOT_DIR/modules/update.sh" || fail "Verificação SHA-256 interna ausente."
+grep -Fq 'restore_unit_states' "$ROOT_DIR/modules/update.sh" || fail "Rollback não restaura estados de units."
+grep -Fq 'cleanup_update_rollbacks' "$ROOT_DIR/modules/update.sh" || fail "Retenção de rollbacks ausente."
+ok "Atualização por release assinada/fail-closed validada."
 
 # Chave privada de assinatura nunca deve ser versionada.
 if find "$ROOT_DIR" -type f \( -name 'minisign.key' -o -name '*.sec' \) | grep -q .; then fail "Chave secreta encontrada."; fi

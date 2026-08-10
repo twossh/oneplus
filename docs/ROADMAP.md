@@ -32,6 +32,9 @@
 ## Fase 4 — Operação e segurança do host
 - [x] backup/restauração criptografado e versionado
 - [x] atualização versionada com verificação minisign + SHA-256
+- [x] canal estável via GitHub Release com pacote + manifesto interno assinados
+- [x] extração segura de release sem symlink/hardlink/path traversal
+- [x] geração offline assistida de chave e preparação de release
 - [x] bloqueio de downgrade e rollback local de atualização
 - [x] auditoria de portas/firewall
 - [x] nftables em tabelas próprias sem limpeza global
@@ -44,7 +47,7 @@
 
 ## Validação real pendente
 - [ ] instalação limpa em Ubuntu 24.04 LTS
-- [ ] upgrade v0.4.0 -> v0.5.0
+- [ ] upgrade v0.5.0 -> v0.5.1
 - [ ] reboot com combinações de serviços
 - [ ] OpenSSH/Dropbear: shell, SFTP e túnel
 - [ ] WebSocket RFC6455 com cliente real
@@ -54,7 +57,8 @@
 - [ ] NAT OpenVPN + full tunnel em VPS real
 - [ ] convivência com UFW/firewall do provedor
 - [ ] criar backup age em uma VPS e restaurar em VPS limpa
-- [ ] configurar chave minisign offline e validar upgrade assinado por tag
+- [ ] configurar chave minisign offline e validar upgrade por GitHub Release assinada
+- [ ] publicar a primeira release assinada e validar v0.5.1 -> próxima versão
 
 ## Próximas fases
 - [ ] OpenVPN mTLS opcional por dispositivo

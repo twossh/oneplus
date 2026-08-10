@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.1 — 2026-08-10
+- Canal estável migrado de clone de tag para assets de GitHub Release assinados.
+- Adicionada dupla verificação: checksum externo do `tar.gz` assinado por Minisign + manifesto interno `release/SHA256SUMS` também assinado.
+- Adicionado `libexec/release_verify.py`, que recusa path traversal, symlink, hardlink, devices, FIFO, entradas fora do diretório esperado e bits setuid/setgid antes da extração.
+- Pacotes de atualização passam a ser extraídos manualmente em diretório temporário somente após a assinatura externa e SHA-256 serem validados.
+- Adicionado `scripts/release-keygen.sh` para gerar a chave Minisign fora do repositório com `umask 077` e bloqueio explícito de chave privada dentro do projeto.
+- Adicionado `scripts/git-fix-modes.sh` para registrar `100755` no índice Git mesmo em fluxos Windows/GitHub Web; o preparador recusa tag com modos executáveis incorretos.
+- Adicionado `scripts/release-prepare.sh` para validar a fonte, criar/assinar manifesto interno, gerar tar.gz reprodutível, assinar checksum externo e verificar o resultado antes da publicação.
+- `scripts/release-sign.sh` mantido como compatibilidade, encaminhando para o novo fluxo completo.
+- Rollback de atualização passa a registrar e restaurar o estado habilitado/ativo das unidades OnePlus.
+- Adicionada retenção automática de rollbacks de atualização, com padrão de três snapshots após sucesso.
+- Chave pública importada pelo menu passa a mostrar SHA-256 para conferência por canal independente.
+- Adicionado `scripts/test-release.py` com casos válidos e maliciosos de arquivo TAR.
+- Validação estática ampliada para recusar symlinks e bits setuid/setgid na árvore do projeto.
+- Adicionado `docs/RELEASES.md` com a cerimônia de chave, preparação, tag e publicação dos assets.
+
 ## 0.5.0 — 2026-08-10
 - Iniciada/concluída a camada principal da Fase 4 de operação e segurança do host.
 - Adicionado backup obrigatório criptografado com `age`, checksum externo e manifesto SHA-256 interno.

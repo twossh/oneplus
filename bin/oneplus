@@ -56,7 +56,7 @@ health_check() {
   check_item "Plugin PAM OpenVPN" bash -c "find /usr/lib -type f -name openvpn-plugin-auth-pam.so -print -quit | grep -q ."
   check_item "PAM OpenVPN restrito ao OnePlus/root negado" bash -c "grep -Fq 'user ingroup oneplus-users' /etc/pam.d/oneplus-openvpn && grep -Fq 'user != root' /etc/pam.d/oneplus-openvpn"
   check_item "sslh-select instalado pelo Ubuntu" test -x /usr/sbin/sslh-select
-  check_item "Proxy WebSocket Python 3" python3 -m py_compile /opt/oneplus/libexec/websocket_proxy.py /opt/oneplus/libexec/openvpn_manager.py
+  check_item "Componentes Python 3" python3 -m py_compile /opt/oneplus/libexec/websocket_proxy.py /opt/oneplus/libexec/openvpn_manager.py /opt/oneplus/libexec/release_verify.py
   check_item "Unidade Dropbear OnePlus" systemctl cat oneplus-dropbear.service
   check_item "Unidade WebSocket OnePlus" systemctl cat oneplus-websocket.service
   check_item "Unidade TLS OnePlus" systemctl cat oneplus-tls.service
@@ -110,7 +110,7 @@ Uso:
   oneplus backup      Backup/restauração criptografado
   oneplus reports     Relatórios de usuários, sessões e tráfego
   oneplus diagnostics Diagnóstico e reparo seguro
-  oneplus update      Atualização por tag assinada
+  oneplus update      Atualização por GitHub Release assinada
   oneplus --help      Mostra esta ajuda
 EOF2
 }

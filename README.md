@@ -1,4 +1,4 @@
-# OnePlus v0.5.0
+# OnePlus v0.5.1
 
 Gerenciador CLI de usuários, SSH, VPN e serviços de conectividade para Ubuntu 24.04 ou superior, administrado exclusivamente pelo terminal.
 
@@ -17,7 +17,7 @@ apt-get update && apt-get install -y curl ca-certificates && bash <(curl -fsSL h
 Para uma tag/branch específica:
 
 ```bash
-ONEPLUS_REF=v0.5.0 bash <(curl -fsSL https://raw.githubusercontent.com/twossh/oneplus/main/setup.sh)
+ONEPLUS_REF=v0.5.1 bash <(curl -fsSL https://raw.githubusercontent.com/twossh/oneplus/main/setup.sh)
 ```
 
 Depois:
@@ -120,46 +120,51 @@ O reparo reinstala somente arquivos/units do OnePlus, corrige permissões e rege
 
 ## Atualização assinada
 
-A v0.5.0 adiciona um atualizador estável **fail-closed** baseado em `minisign` + SHA-256.
+A v0.5.1 endurece o canal estável: o OnePlus passa a atualizar por **GitHub Release assinada**, não executando código novo diretamente de uma tag antes de validar o pacote.
 
-Uma atualização por tag só é aceita quando:
+A atualização exige:
 
-1. existe uma chave pública confiável em `/etc/oneplus/update.pub`;
-2. a tag contém `release/SHA256SUMS`;
-3. existe `release/SHA256SUMS.minisig` válido;
-4. todos os arquivos cobertos pelo manifesto passam no SHA-256;
-5. `VERSION` corresponde à tag;
-6. `scripts/validate.sh` passa antes de `install.sh`.
+1. chave pública Minisign confiável em `/etc/oneplus/update.pub`;
+2. `OnePlus-vX.Y.Z.tar.gz`;
+3. checksum `.sha256` assinado por Minisign;
+4. SHA-256 correto do pacote;
+5. inspeção do TAR sem symlink, hardlink, device, FIFO, path traversal ou setuid/setgid;
+6. `release/SHA256SUMS` interno assinado;
+7. SHA-256 de toda a árvore;
+8. `VERSION` correspondente à release;
+9. `scripts/validate.sh` aprovado antes de `install.sh`.
 
-O atualizador não aceita downgrade e cria rollback local antes da instalação.
+Downgrade é recusado. Antes da instalação é criado rollback local com os arquivos e o estado das unidades `systemd`; após sucesso, a retenção padrão é de três rollbacks.
 
-### Criar a chave de releases
+### Gerar a chave de releases
 
-Faça isso **fora da VPS de produção**, em uma estação administrativa confiável:
+Faça uma única vez, **fora da VPS de produção e fora do repositório**:
 
 ```bash
-minisign -G -p oneplus-release.pub -s oneplus-release.key
+bash scripts/release-keygen.sh "$HOME/.config/oneplus-release"
 ```
 
-A chave secreta é protegida por senha por padrão. **Nunca envie `oneplus-release.key` ao GitHub ou à VPS.**
+O script cria a chave privada e a pública com permissões restritas e recusa gerar a chave dentro do projeto. **Nunca envie `oneplus-release.key` ao GitHub ou à VPS.**
 
-Copie somente `oneplus-release.pub` para a VPS e importe em:
+Copie somente a chave pública para a VPS, confira seu SHA-256 por um canal independente e importe em:
 
 ```bash
 oneplus update
 ```
 
-Para preparar uma release no computador de desenvolvimento:
+### Preparar uma release
+
+Depois de atualizar `VERSION`/`CHANGELOG.md` e fazer commit do código:
 
 ```bash
-bash scripts/release-sign.sh /caminho/seguro/oneplus-release.key
-git add release/SHA256SUMS release/SHA256SUMS.minisig VERSION CHANGELOG.md
-git commit -m "Release v0.5.1"
-git tag v0.5.1
-git push origin main --tags
+bash scripts/release-prepare.sh \
+  "$HOME/.config/oneplus-release/oneplus-release.key" \
+  "$HOME/.config/oneplus-release/oneplus-release.pub"
 ```
 
-O `setup.sh` usado na primeira instalação continua sendo um bootstrap via HTTPS/GitHub. Depois que a chave pública é confiada ao servidor, upgrades estáveis podem usar a cadeia assinada acima.
+O processo gera o manifesto interno assinado e os três assets para a GitHub Release. As instruções completas estão em `docs/RELEASES.md`.
+
+O `setup.sh` usado na primeira instalação continua sendo um bootstrap via HTTPS/GitHub. Depois que a chave pública é instalada e conferida, os upgrades estáveis usam a cadeia Minisign descrita acima.
 
 ## Conectividade
 

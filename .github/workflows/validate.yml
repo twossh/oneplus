@@ -16,7 +16,8 @@ jobs:
 
       - name: Restore executable permissions for validation
         run: |
-          chmod +x setup.sh install.sh uninstall.sh bin/oneplus lib/*.sh modules/*.sh libexec/* scripts/*.sh scripts/*.py
+          chmod +x scripts/fix-permissions.sh
+          bash scripts/fix-permissions.sh
 
       - name: Static validation
         run: bash scripts/validate.sh
@@ -32,6 +33,9 @@ jobs:
 
       - name: Operations/security tests
         run: bash scripts/test-operations.sh
+
+      - name: Signed release archive security tests
+        run: python3 scripts/test-release.py
 
       - name: WebSocket integration tests
         run: python3 scripts/test-websocket.py

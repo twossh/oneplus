@@ -45,17 +45,10 @@ git -c advice.detachedHead=false clone --depth 1 --branch "$ONEPLUS_REF" "$REPO_
 COMMIT=$(git -C "$SRC_DIR" rev-parse HEAD)
 printf '[INFO] Commit: %s\n' "$COMMIT"
 
-# GitHub Web Upload pode não preservar bits executáveis. O bootstrap corrige antes da validação.
-chmod 0755 \
-  "$SRC_DIR/setup.sh" \
-  "$SRC_DIR/install.sh" \
-  "$SRC_DIR/uninstall.sh" \
-  "$SRC_DIR/bin/oneplus" \
-  "$SRC_DIR/lib/"*.sh \
-  "$SRC_DIR/modules/"*.sh \
-  "$SRC_DIR/libexec/"* \
-  "$SRC_DIR/scripts/"*.sh \
-  "$SRC_DIR/scripts/"*.py
+# GitHub Web Upload pode não preservar bits executáveis. Centralizamos a
+# normalização antes de qualquer validação.
+chmod 0755 "$SRC_DIR/scripts/fix-permissions.sh"
+bash "$SRC_DIR/scripts/fix-permissions.sh"
 
 printf '[INFO] Validando a árvore baixada...\n'
 bash "$SRC_DIR/scripts/validate.sh"
