@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.2 — 2026-08-10
+- Adicionada consulta da release estável mais recente pela API REST oficial do GitHub, sem atualização automática silenciosa.
+- Adicionado `libexec/github_release.py` para validar JSON de release antes de qualquer URL de asset ser usada.
+- Canal estável agora recusa explicitamente releases `draft` e `prerelease` e exige tag semântica `vX.Y.Z`.
+- Os três assets obrigatórios são validados por nome, estado `uploaded`, tamanho máximo e URL exata em `github.com/twossh/oneplus/releases/download/...`.
+- O digest SHA-256 publicado pelo GitHub, quando disponível, passa a ser verificado como camada adicional; Minisign + SHA-256 continuam sendo a raiz de confiança da release.
+- Adicionados `oneplus update --check`, `oneplus update --latest` e `oneplus update --tag vX.Y.Z`.
+- O menu de atualização ganhou verificação de release, atualização para a versão estável mais recente e atualização por tag específica.
+- Notas da GitHub Release são sanitizadas antes de serem exibidas no terminal e limitadas em tamanho.
+- Metadados JSON e assets têm limites de tamanho e timeouts de download.
+- Adicionado `scripts/test-update-metadata.py` com testes de draft, prerelease, asset ausente/duplicado, URL externa, digest inválido e tamanho excessivo.
+- GitHub Actions, validação estática, instalador e preparação de release passam a testar o novo parser de metadados.
+
 ## 0.5.1 — 2026-08-10
 - Canal estável migrado de clone de tag para assets de GitHub Release assinados.
 - Adicionada dupla verificação: checksum externo do `tar.gz` assinado por Minisign + manifesto interno `release/SHA256SUMS` também assinado.

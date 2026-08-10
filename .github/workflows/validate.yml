@@ -37,6 +37,9 @@ jobs:
       - name: Signed release archive security tests
         run: python3 scripts/test-release.py
 
+      - name: GitHub Release metadata security tests
+        run: python3 scripts/test-update-metadata.py
+
       - name: WebSocket integration tests
         run: python3 scripts/test-websocket.py
 

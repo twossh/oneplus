@@ -31,7 +31,7 @@ line_verify=$(grep -n 'verify_release_tree "$src" "$tag"' "$ROOT_DIR/modules/upd
 line_install=$(grep -n 'bash "$src/install.sh"' "$ROOT_DIR/modules/update.sh" | head -1 | cut -d: -f1)
 [[ "$line_verify" =~ ^[0-9]+$ && "$line_install" =~ ^[0-9]+$ && "$line_verify" -lt "$line_install" ]] || fail "Instalador pode rodar antes da verificação assinada."
 grep -Fq 'verify_external_release_assets' "$ROOT_DIR/modules/update.sh" || fail "Verificação externa de assets ausente."
-grep -Fq 'release_verify.py extract' "$ROOT_DIR/modules/update.sh" || fail "Extração segura de release ausente."
+grep -Eq 'release_verify\.py[^[:cntrl:]]*extract' "$ROOT_DIR/modules/update.sh" || fail "Extração segura de release ausente."
 grep -Fq 'minisign -Vm' "$ROOT_DIR/modules/update.sh" || fail "Verificação Minisign ausente."
 grep -Fq 'sha256sum -c release/SHA256SUMS' "$ROOT_DIR/modules/update.sh" || fail "Verificação SHA-256 interna ausente."
 grep -Fq 'restore_unit_states' "$ROOT_DIR/modules/update.sh" || fail "Rollback não restaura estados de units."

@@ -33,6 +33,8 @@
 - [x] backup/restauração criptografado e versionado
 - [x] atualização versionada com verificação minisign + SHA-256
 - [x] canal estável via GitHub Release com pacote + manifesto interno assinados
+- [x] consulta da release estável pela API GitHub com validação de metadados/assets
+- [x] CLI `update --check/--latest/--tag` sem atualização silenciosa
 - [x] extração segura de release sem symlink/hardlink/path traversal
 - [x] geração offline assistida de chave e preparação de release
 - [x] bloqueio de downgrade e rollback local de atualização
@@ -58,7 +60,9 @@
 - [ ] convivência com UFW/firewall do provedor
 - [ ] criar backup age em uma VPS e restaurar em VPS limpa
 - [ ] configurar chave minisign offline e validar upgrade por GitHub Release assinada
-- [ ] publicar a primeira release assinada e validar v0.5.1 -> próxima versão
+- [ ] publicar a primeira release assinada e validar v0.5.1 -> v0.5.2
+- [ ] validar `oneplus update --check` contra a release v0.5.2 publicada
+- [ ] validar `oneplus update --latest` com rollback em uma VPS de teste
 
 ## Próximas fases
 - [ ] OpenVPN mTLS opcional por dispositivo

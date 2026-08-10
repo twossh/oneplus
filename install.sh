@@ -35,7 +35,7 @@ apt-get install -y --no-install-recommends \
 
 info "Validando componentes Python após instalar dependências..."
 PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/oneplus-install-pycache.$$" python3 -m py_compile \
-  "$SELF_DIR/libexec/websocket_proxy.py" "$SELF_DIR/libexec/openvpn_manager.py" "$SELF_DIR/libexec/release_verify.py" "$SELF_DIR/scripts/test-websocket.py" "$SELF_DIR/scripts/test-release.py"
+  "$SELF_DIR/libexec/websocket_proxy.py" "$SELF_DIR/libexec/openvpn_manager.py" "$SELF_DIR/libexec/release_verify.py" "$SELF_DIR/libexec/github_release.py" "$SELF_DIR/scripts/test-websocket.py" "$SELF_DIR/scripts/test-release.py" "$SELF_DIR/scripts/test-update-metadata.py"
 rm -rf -- "${TMPDIR:-/tmp}/oneplus-install-pycache.$$" 2>/dev/null || true
 
 # dnstt v1.20260501.0 requer Go 1.24+.

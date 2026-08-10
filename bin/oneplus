@@ -56,7 +56,7 @@ health_check() {
   check_item "Plugin PAM OpenVPN" bash -c "find /usr/lib -type f -name openvpn-plugin-auth-pam.so -print -quit | grep -q ."
   check_item "PAM OpenVPN restrito ao OnePlus/root negado" bash -c "grep -Fq 'user ingroup oneplus-users' /etc/pam.d/oneplus-openvpn && grep -Fq 'user != root' /etc/pam.d/oneplus-openvpn"
   check_item "sslh-select instalado pelo Ubuntu" test -x /usr/sbin/sslh-select
-  check_item "Componentes Python 3" python3 -m py_compile /opt/oneplus/libexec/websocket_proxy.py /opt/oneplus/libexec/openvpn_manager.py /opt/oneplus/libexec/release_verify.py
+  check_item "Componentes Python 3" python3 -m py_compile /opt/oneplus/libexec/websocket_proxy.py /opt/oneplus/libexec/openvpn_manager.py /opt/oneplus/libexec/release_verify.py /opt/oneplus/libexec/github_release.py
   check_item "Unidade Dropbear OnePlus" systemctl cat oneplus-dropbear.service
   check_item "Unidade WebSocket OnePlus" systemctl cat oneplus-websocket.service
   check_item "Unidade TLS OnePlus" systemctl cat oneplus-tls.service
@@ -110,7 +110,10 @@ Uso:
   oneplus backup      Backup/restauração criptografado
   oneplus reports     Relatórios de usuários, sessões e tráfego
   oneplus diagnostics Diagnóstico e reparo seguro
-  oneplus update      Atualização por GitHub Release assinada
+  oneplus update      Menu de atualização assinada
+  oneplus update --check        Verifica a release estável mais recente
+  oneplus update --latest       Atualiza para a release estável mais recente
+  oneplus update --tag vX.Y.Z   Atualiza para uma tag assinada específica
   oneplus --help      Mostra esta ajuda
 EOF2
 }
@@ -212,7 +215,7 @@ case "${1:-}" in
   backup|restore) module_backup ;;
   reports|report) module_reports ;;
   diagnostics|diag) module_diagnostics ;;
-  update|upgrade) module_update ;;
+  update|upgrade) shift; update_cli "$@" ;;
   --help|-h) show_help ;;
   *) error "Argumento desconhecido: $1"; show_help; exit 2 ;;
 esac

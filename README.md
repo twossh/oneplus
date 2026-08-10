@@ -1,4 +1,4 @@
-# OnePlus v0.5.1
+# OnePlus v0.5.2
 
 Gerenciador CLI de usuários, SSH, VPN e serviços de conectividade para Ubuntu 24.04 ou superior, administrado exclusivamente pelo terminal.
 
@@ -120,7 +120,7 @@ O reparo reinstala somente arquivos/units do OnePlus, corrige permissões e rege
 
 ## Atualização assinada
 
-A v0.5.1 endurece o canal estável: o OnePlus passa a atualizar por **GitHub Release assinada**, não executando código novo diretamente de uma tag antes de validar o pacote.
+A v0.5.2 completa o canal estável: o OnePlus passa a atualizar por **GitHub Release assinada**, não executando código novo diretamente de uma tag antes de validar o pacote.
 
 A atualização exige:
 
@@ -135,6 +135,18 @@ A atualização exige:
 9. `scripts/validate.sh` aprovado antes de `install.sh`.
 
 Downgrade é recusado. Antes da instalação é criado rollback local com os arquivos e o estado das unidades `systemd`; após sucesso, a retenção padrão é de três rollbacks.
+
+A v0.5.2 consulta a API oficial de GitHub Releases somente quando o administrador solicita. O JSON retornado é validado antes de usar qualquer `browser_download_url`: draft/prerelease são recusados, a tag deve ser `vX.Y.Z` e os três assets esperados precisam existir com URL e tamanho válidos.
+
+Comandos diretos:
+
+```bash
+oneplus update --check
+oneplus update --latest
+oneplus update --tag v0.5.2
+```
+
+`--check` apenas consulta e informa; não instala nada. `--latest` e `--tag` continuam exigindo chave Minisign confiável, validação completa e confirmação `ATUALIZAR`.
 
 ### Gerar a chave de releases
 

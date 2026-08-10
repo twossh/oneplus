@@ -78,6 +78,7 @@ bash "$ROOT_DIR/scripts/test-mux.sh"
 bash "$ROOT_DIR/scripts/test-operations.sh"
 python3 "$ROOT_DIR/scripts/test-websocket.py"
 python3 "$ROOT_DIR/scripts/test-release.py"
+python3 "$ROOT_DIR/scripts/test-update-metadata.py"
 
 mkdir -p "$ROOT_DIR/release" "$ROOT_DIR/dist"
 rm -f -- "$ROOT_DIR/release/SHA256SUMS" "$ROOT_DIR/release/SHA256SUMS.minisig"

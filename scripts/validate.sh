@@ -8,10 +8,10 @@ fail() { printf '[ERRO] %s\n' "$*" >&2; FAILED=1; }
 ok()   { printf '[OK] %s\n' "$*"; }
 
 required=(
-  VERSION README.md CHANGELOG.md docs/RELEASES.md release/README.md setup.sh install.sh uninstall.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-operations.sh scripts/test-release.py scripts/fix-permissions.sh scripts/git-fix-modes.sh scripts/release-keygen.sh scripts/release-prepare.sh scripts/release-sign.sh
+  VERSION README.md CHANGELOG.md docs/RELEASES.md release/README.md setup.sh install.sh uninstall.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-operations.sh scripts/test-release.py scripts/test-update-metadata.py scripts/fix-permissions.sh scripts/git-fix-modes.sh scripts/release-keygen.sh scripts/release-prepare.sh scripts/release-sign.sh
   bin/oneplus lib/common.sh lib/os.sh
   modules/system.sh modules/ssh.sh modules/dropbear.sh modules/websocket.sh modules/tls.sh modules/openvpn.sh modules/mux.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh modules/firewall.sh modules/backup.sh modules/reports.sh modules/diagnostics.sh modules/update.sh
-  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-mux libexec/run-firewall libexec/websocket_proxy.py libexec/openvpn_manager.py libexec/release_verify.py
+  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-mux libexec/run-firewall libexec/websocket_proxy.py libexec/openvpn_manager.py libexec/release_verify.py libexec/github_release.py
   defaults/oneplus.conf defaults/badvpn.env defaults/slowdns.env defaults/users.conf defaults/dropbear.env defaults/websocket.env defaults/tls.env defaults/openvpn.env defaults/mux.env defaults/firewall.env
   systemd/oneplus-badvpn.service systemd/oneplus-slowdns.service systemd/oneplus-dropbear.service systemd/oneplus-websocket.service systemd/oneplus-tls.service systemd/oneplus-openvpn.service systemd/oneplus-mux.service systemd/oneplus-firewall.service
   systemd/oneplus-user-maintenance.service systemd/oneplus-user-maintenance.timer
@@ -47,8 +47,8 @@ done
 
 executables=(setup.sh install.sh uninstall.sh bin/oneplus lib/common.sh lib/os.sh \
   modules/system.sh modules/ssh.sh modules/dropbear.sh modules/websocket.sh modules/tls.sh modules/openvpn.sh modules/mux.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh modules/firewall.sh modules/backup.sh modules/reports.sh modules/diagnostics.sh modules/update.sh \
-  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-mux libexec/run-firewall libexec/websocket_proxy.py libexec/openvpn_manager.py libexec/release_verify.py \
-  scripts/validate.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-operations.sh scripts/test-release.py scripts/fix-permissions.sh scripts/git-fix-modes.sh scripts/release-keygen.sh scripts/release-prepare.sh scripts/release-sign.sh scripts/test-websocket.py)
+  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-mux libexec/run-firewall libexec/websocket_proxy.py libexec/openvpn_manager.py libexec/release_verify.py libexec/github_release.py \
+  scripts/validate.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-operations.sh scripts/test-release.py scripts/test-update-metadata.py scripts/fix-permissions.sh scripts/git-fix-modes.sh scripts/release-keygen.sh scripts/release-prepare.sh scripts/release-sign.sh scripts/test-websocket.py scripts/test-update-metadata.py)
 for rel in "${executables[@]}"; do
   [[ -x "$ROOT_DIR/$rel" ]] || fail "Permissão executável ausente: $rel"
 done
@@ -110,7 +110,7 @@ fi
 
 
 if command -v python3 >/dev/null 2>&1; then
-  if ! PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/oneplus-pycache.$$" python3 -m py_compile "$ROOT_DIR/libexec/websocket_proxy.py" "$ROOT_DIR/libexec/openvpn_manager.py" "$ROOT_DIR/libexec/release_verify.py" "$ROOT_DIR/scripts/test-websocket.py" "$ROOT_DIR/scripts/test-release.py"; then
+  if ! PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/oneplus-pycache.$$" python3 -m py_compile "$ROOT_DIR/libexec/websocket_proxy.py" "$ROOT_DIR/libexec/openvpn_manager.py" "$ROOT_DIR/libexec/release_verify.py" "$ROOT_DIR/libexec/github_release.py" "$ROOT_DIR/scripts/test-websocket.py" "$ROOT_DIR/scripts/test-release.py" "$ROOT_DIR/scripts/test-update-metadata.py"; then
     fail "Erro de sintaxe Python em componente OnePlus."
   else
     ok "Sintaxe Python dos componentes validada."
@@ -288,7 +288,7 @@ fi
 if ! grep -Fq 'ONEPLUS_UPDATE_RELEASE_BASE="https://github.com/twossh/oneplus/releases/download"' "$ROOT_DIR/modules/update.sh"; then
   fail "Atualizador não está fixado no canal GitHub Releases."
 fi
-if ! grep -Fq 'release_verify.py extract' "$ROOT_DIR/modules/update.sh"; then
+if ! grep -Eq 'release_verify\.py[^[:cntrl:]]*extract' "$ROOT_DIR/modules/update.sh"; then
   fail "Atualizador não usa extração segura de release."
 fi
 if ! grep -Fq 'tipo de entrada proibido' "$ROOT_DIR/libexec/release_verify.py"; then
@@ -299,6 +299,24 @@ if ! grep -Fq 'A chave privada NÃO deve ser copiada' "$ROOT_DIR/scripts/release
 fi
 if ! grep -Fq 'A chave privada está dentro do repositório' "$ROOT_DIR/scripts/release-prepare.sh"; then
   fail "Preparador de release não bloqueia chave privada dentro do repositório."
+fi
+
+# Cadeia de atualização v0.5.2+: metadados REST validados antes de usar URLs de assets.
+if ! grep -Fq 'ONEPLUS_UPDATE_API="https://api.github.com/repos/twossh/oneplus/releases"' "$ROOT_DIR/modules/update.sh"; then
+  fail "Atualizador não está fixado no endpoint oficial de Releases da API GitHub."
+fi
+if ! grep -Fq 'release_helper asset-url' "$ROOT_DIR/modules/update.sh" || ! grep -Fq 'browser_download_url' "$ROOT_DIR/libexec/github_release.py"; then
+  fail "Atualizador não valida metadados/URLs dos assets antes do download."
+else
+  ok "URLs de assets são obtidas de metadados GitHub validados."
+fi
+if ! grep -Fq 'data.get("draft") is not False' "$ROOT_DIR/libexec/github_release.py" || ! grep -Fq 'data.get("prerelease") is not False' "$ROOT_DIR/libexec/github_release.py"; then
+  fail "Canal estável deve recusar draft e prerelease."
+else
+  ok "Canal estável recusa draft/prerelease."
+fi
+if ! grep -Fq 'oneplus update --check' "$ROOT_DIR/bin/oneplus" || ! grep -Fq 'signed_update_latest' "$ROOT_DIR/modules/update.sh"; then
+  fail "CLI de verificação/atualização da release mais recente ausente."
 fi
 
 if [[ "$FAILED" -ne 0 ]]; then

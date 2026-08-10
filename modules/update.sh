@@ -3,6 +3,9 @@ set -Eeuo pipefail
 
 ONEPLUS_UPDATE_REPO="https://github.com/twossh/oneplus"
 ONEPLUS_UPDATE_RELEASE_BASE="https://github.com/twossh/oneplus/releases/download"
+ONEPLUS_UPDATE_API="https://api.github.com/repos/twossh/oneplus/releases"
+ONEPLUS_UPDATE_API_VERSION="2026-03-10"
+ONEPLUS_UPDATE_HELPER="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/libexec/github_release.py"
 ONEPLUS_UPDATE_KEY="/etc/oneplus/update.pub"
 ONEPLUS_UPDATE_ROLLBACK="/var/lib/oneplus/update-rollback"
 ONEPLUS_UPDATE_KEEP_ROLLBACKS="${ONEPLUS_UPDATE_KEEP_ROLLBACKS:-3}"
@@ -168,14 +171,143 @@ verify_external_release_assets() {
   [[ "$actual_hash" == "$expected_hash" ]] || { error "SHA-256 do pacote não confere."; return 1; }
 }
 
-signed_update_release() {
+github_api_download_json() {
+  local url="$1" out="$2"
+  curl --proto '=https' --tlsv1.2 -fLsS --retry 2 --retry-delay 2 \
+    --connect-timeout 10 --max-time 45 --max-filesize 2097152 \
+    -H 'Accept: application/vnd.github+json' \
+    -H "X-GitHub-Api-Version: $ONEPLUS_UPDATE_API_VERSION" \
+    -H "User-Agent: OnePlus-SSH-Manager/$(cat /opt/oneplus/VERSION 2>/dev/null || echo dev)" \
+    -o "$out" "$url"
+  [[ -s "$out" ]] || { error "GitHub retornou resposta vazia."; return 1; }
+  (( $(stat -c '%s' "$out") <= 2097152 )) || { error "Metadados da release excederam o limite."; return 1; }
+}
+
+release_helper() {
+  [[ -x "$ONEPLUS_UPDATE_HELPER" || -f "$ONEPLUS_UPDATE_HELPER" ]] || { error "Validador de metadados ausente: $ONEPLUS_UPDATE_HELPER"; return 1; }
+  python3 "$ONEPLUS_UPDATE_HELPER" "$@"
+}
+
+fetch_latest_release_json() {
+  local out="$1"
+  github_api_download_json "$ONEPLUS_UPDATE_API/latest" "$out"
+  release_helper validate "$out" >/dev/null
+}
+
+fetch_tag_release_json() {
+  local tag="$1" out="$2"
+  [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { error "Tag inválida."; return 1; }
+  github_api_download_json "$ONEPLUS_UPDATE_API/tags/$tag" "$out"
+  release_helper validate "$out" --expect-tag "$tag" >/dev/null
+}
+
+check_latest_release() {
   require_root
+  command_exists curl || { error "curl não instalado."; return 1; }
+  command_exists python3 || { error "python3 não instalado."; return 1; }
+  local tmp json tag target current
+  tmp=$(mktemp -d /tmp/oneplus-release-check.XXXXXX)
+  json="$tmp/latest.json"
+  if ! fetch_latest_release_json "$json"; then
+    rm -rf -- "$tmp"
+    error "Não foi possível obter uma release estável válida do GitHub."
+    return 1
+  fi
+  tag=$(release_helper tag "$json")
+  target=${tag#v}
+  current=$(cat /opt/oneplus/VERSION 2>/dev/null || echo 0.0.0)
+  release_helper summary "$json"
+  printf '\nInstalada: %s\nDisponível: %s\n' "$current" "$target"
+  if dpkg --compare-versions "$target" gt "$current"; then
+    printf '%bAtualização disponível.%b\n' "$C_GREEN" "$C_RESET"
+  elif dpkg --compare-versions "$target" eq "$current"; then
+    printf '%bVocê já está na versão estável mais recente.%b\n' "$C_GREEN" "$C_RESET"
+  else
+    warn "A release estável publicada é anterior à versão instalada; nenhuma ação será feita."
+  fi
+  if [[ ! -r "$ONEPLUS_UPDATE_KEY" ]]; then
+    warn "A chave pública de release ainda não está instalada; consultas funcionam, instalação assinada não."
+  fi
+  rm -rf -- "$tmp"
+}
+
+verify_optional_github_digest() {
+  local archive="$1" digest="$2" actual
+  [[ -n "$digest" ]] || { info "GitHub não informou digest do asset; Minisign + SHA-256 continuam obrigatórios."; return 0; }
+  [[ "$digest" =~ ^sha256:([0-9a-f]{64})$ ]] || { error "Digest GitHub em formato inesperado."; return 1; }
+  actual=$(sha256sum "$archive" | awk '{print $1}')
+  [[ "$actual" == "${BASH_REMATCH[1]}" ]] || { error "Digest publicado pelo GitHub não confere com o asset baixado."; return 1; }
+  ok "Digest SHA-256 informado pelo GitHub confere."
+}
+
+install_signed_release_from_json() {
+  local json="$1" tag="$2" current="$3" target="${tag#v}"
   command_exists minisign || { error "minisign não instalado."; return 1; }
   command_exists curl || { error "curl não instalado."; return 1; }
   command_exists python3 || { error "python3 não instalado."; return 1; }
   [[ -r "$ONEPLUS_UPDATE_KEY" ]] || { error "Configure primeiro a chave pública de atualização."; return 1; }
+  update_key_format_ok "$ONEPLUS_UPDATE_KEY" || { error "A chave pública instalada é inválida."; return 1; }
+  if ! dpkg --compare-versions "$target" gt "$current"; then
+    warn "Versão alvo ($target) não é superior à instalada ($current). Downgrade/reinstalação é recusado."
+    return 1
+  fi
 
-  local tag current target tmp top asset_name archive checksum signature src rollback confirm base
+  local tmp top asset_name archive checksum signature src rollback confirm url digest
+  tmp=$(mktemp -d /tmp/oneplus-update.XXXXXX)
+  top="OnePlus-v${target}"
+  asset_name="${top}.tar.gz"
+  archive="$tmp/$asset_name"
+  checksum="$tmp/${asset_name}.sha256"
+  signature="$tmp/${asset_name}.sha256.minisig"
+
+  info "Obtendo URLs de assets validadas pelos metadados da GitHub Release $tag..."
+  url=$(release_helper asset-url "$json" "$asset_name" --expect-tag "$tag") || { rm -rf -- "$tmp"; return 1; }
+  download_release_file "$url" "$archive" 67108864 || { rm -rf -- "$tmp"; return 1; }
+  digest=$(release_helper asset-digest "$json" "$asset_name" --expect-tag "$tag") || { rm -rf -- "$tmp"; return 1; }
+  verify_optional_github_digest "$archive" "$digest" || { rm -rf -- "$tmp"; return 1; }
+
+  url=$(release_helper asset-url "$json" "${asset_name}.sha256" --expect-tag "$tag") || { rm -rf -- "$tmp"; return 1; }
+  download_release_file "$url" "$checksum" 4096 || { rm -rf -- "$tmp"; return 1; }
+  url=$(release_helper asset-url "$json" "${asset_name}.sha256.minisig" --expect-tag "$tag") || { rm -rf -- "$tmp"; return 1; }
+  download_release_file "$url" "$signature" 16384 || { rm -rf -- "$tmp"; return 1; }
+
+  info "Verificando assinatura externa e SHA-256 do pacote..."
+  verify_external_release_assets "$archive" "$checksum" "$signature" "$asset_name" || { rm -rf -- "$tmp"; return 1; }
+
+  info "Inspecionando e extraindo pacote sem links/arquivos especiais..."
+  python3 "$ONEPLUS_UPDATE_HELPER" --help >/dev/null 2>&1 || { rm -rf -- "$tmp"; return 1; }
+  python3 "$(cd "$(dirname "$ONEPLUS_UPDATE_HELPER")" && pwd)/release_verify.py" extract "$archive" "$top" "$tmp/extracted" >/dev/null || { rm -rf -- "$tmp"; return 1; }
+  src="$tmp/extracted/$top"
+
+  info "Verificando manifesto interno assinado..."
+  verify_release_tree "$src" "$tag" || { rm -rf -- "$tmp"; return 1; }
+
+  printf '\n'
+  release_helper summary "$json" --expect-tag "$tag" || { rm -rf -- "$tmp"; return 1; }
+  printf '\nRelease assinada e validada: %s -> %s\n' "$current" "$target"
+  printf "Digite ATUALIZAR para instalar: "; read -r confirm
+  [[ "$confirm" == ATUALIZAR ]] || { info "Cancelado."; rm -rf -- "$tmp"; return 0; }
+
+  rollback=$(create_update_rollback)
+  info "Rollback local: $rollback"
+  if bash "$src/install.sh"; then
+    if [[ "$(cat /opt/oneplus/VERSION 2>/dev/null)" == "$target" ]] && /usr/local/bin/oneplus --check; then
+      cleanup_update_rollbacks "$ONEPLUS_UPDATE_KEEP_ROLLBACKS"
+      rm -rf -- "$tmp"
+      ok "OnePlus atualizado com sucesso para $target."
+      return 0
+    fi
+  fi
+
+  error "Atualização falhou. Restaurando arquivos e estados de serviços anteriores."
+  restore_update_rollback "$rollback" || error "Rollback automático falhou; arquivo preservado: $rollback"
+  rm -rf -- "$tmp"
+  return 1
+}
+
+signed_update_release() {
+  require_root
+  local tag current target tmp json
   current=$(cat /opt/oneplus/VERSION 2>/dev/null || echo 0.0.0)
   printf "Release assinada a instalar (ex.: v0.5.2): "; read -r tag
   [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { error "Tag inválida."; return 1; }
@@ -184,50 +316,48 @@ signed_update_release() {
     warn "Versão alvo ($target) não é superior à instalada ($current). Downgrade/reinstalação é recusado."
     return 1
   fi
+  tmp=$(mktemp -d /tmp/oneplus-release-meta.XXXXXX)
+  json="$tmp/release.json"
+  if ! fetch_tag_release_json "$tag" "$json"; then
+    rm -rf -- "$tmp"
+    error "Release $tag não existe, é prerelease/draft ou não contém os três assets esperados."
+    return 1
+  fi
+  install_signed_release_from_json "$json" "$tag" "$current"
+  local rc=$?
+  rm -rf -- "$tmp"
+  return "$rc"
+}
 
-  tmp=$(mktemp -d /tmp/oneplus-update.XXXXXX)
-  trap 'rm -rf -- "${tmp:-}" 2>/dev/null || true' RETURN
-  top="OnePlus-v${target}"
-  asset_name="${top}.tar.gz"
-  archive="$tmp/$asset_name"
-  checksum="$tmp/${asset_name}.sha256"
-  signature="$tmp/${asset_name}.sha256.minisig"
-  base="$ONEPLUS_UPDATE_RELEASE_BASE/$tag"
-
-  info "Baixando assets da GitHub Release $tag..."
-  download_release_file "$base/$asset_name" "$archive" 67108864
-  download_release_file "$base/${asset_name}.sha256" "$checksum" 4096
-  download_release_file "$base/${asset_name}.sha256.minisig" "$signature" 16384
-
-  info "Verificando assinatura externa e SHA-256 do pacote..."
-  verify_external_release_assets "$archive" "$checksum" "$signature" "$asset_name" || return 1
-
-  info "Inspecionando e extraindo pacote sem links/arquivos especiais..."
-  python3 /opt/oneplus/libexec/release_verify.py extract "$archive" "$top" "$tmp/extracted" >/dev/null || return 1
-  src="$tmp/extracted/$top"
-
-  info "Verificando manifesto interno assinado..."
-  verify_release_tree "$src" "$tag" || return 1
-
-  printf "Release assinada e validada: %s -> %s\n" "$current" "$target"
-  printf "Digite ATUALIZAR para instalar: "; read -r confirm
-  [[ "$confirm" == ATUALIZAR ]] || { info "Cancelado."; return 0; }
-
-  rollback=$(create_update_rollback)
-  info "Rollback local: $rollback"
-  if bash "$src/install.sh"; then
-    if [[ "$(cat /opt/oneplus/VERSION 2>/dev/null)" == "$target" ]] && /usr/local/bin/oneplus --check; then
-      cleanup_update_rollbacks "$ONEPLUS_UPDATE_KEEP_ROLLBACKS"
-      rm -rf -- "$tmp"; trap - RETURN
-      ok "OnePlus atualizado com sucesso para $target."
+signed_update_latest() {
+  require_root
+  local current tmp json tag target
+  current=$(cat /opt/oneplus/VERSION 2>/dev/null || echo 0.0.0)
+  tmp=$(mktemp -d /tmp/oneplus-release-latest.XXXXXX)
+  json="$tmp/latest.json"
+  if ! fetch_latest_release_json "$json"; then
+    rm -rf -- "$tmp"
+    error "Não foi possível obter a release estável mais recente."
+    return 1
+  fi
+  tag=$(release_helper tag "$json")
+  target=${tag#v}
+  if ! dpkg --compare-versions "$target" gt "$current"; then
+    release_helper summary "$json"
+    printf '\n'
+    if dpkg --compare-versions "$target" eq "$current"; then
+      ok "OnePlus já está atualizado ($current)."
+      rm -rf -- "$tmp"
       return 0
     fi
+    warn "Release estável ($target) é anterior à versão instalada ($current); atualização recusada."
+    rm -rf -- "$tmp"
+    return 1
   fi
-
-  error "Atualização falhou. Restaurando arquivos e estados de serviços anteriores."
-  restore_update_rollback "$rollback" || error "Rollback automático falhou; arquivo preservado: $rollback"
-  rm -rf -- "$tmp"; trap - RETURN
-  return 1
+  install_signed_release_from_json "$json" "$tag" "$current"
+  local rc=$?
+  rm -rf -- "$tmp"
+  return "$rc"
 }
 
 show_update_status() {
@@ -235,7 +365,8 @@ show_update_status() {
   [[ -d "$ONEPLUS_UPDATE_ROLLBACK" ]] && rollbacks=$(find "$ONEPLUS_UPDATE_ROLLBACK" -mindepth 1 -maxdepth 1 -type d -name '20????????T??????Z' | wc -l | tr -d ' ')
   printf "Versão instalada: %s\n" "$(cat /opt/oneplus/VERSION 2>/dev/null || echo N/D)"
   printf "Repositório: %s\n" "$ONEPLUS_UPDATE_REPO"
-  printf "Canal estável: GitHub Releases assinadas\n"
+  printf "Canal estável: GitHub Releases publicadas, não-draft e não-prerelease\n"
+  printf "API: %s/latest\n" "$ONEPLUS_UPDATE_API"
   printf "Rollbacks locais: %s (retenção após sucesso: %s)\n" "$rollbacks" "$ONEPLUS_UPDATE_KEEP_ROLLBACKS"
   if [[ -r "$ONEPLUS_UPDATE_KEY" ]]; then
     printf "Chave confiável: %s\n" "$ONEPLUS_UPDATE_KEY"
@@ -244,7 +375,29 @@ show_update_status() {
   else
     printf "Chave confiável: NÃO CONFIGURADA\n"
   fi
-  printf "\nPolítica: pacote tar.gz -> checksum assinado -> extração segura -> manifesto interno assinado -> validação -> instalação.\n"
+  printf "\nPolítica: metadados GitHub -> URLs fixas validadas -> pacote -> checksum Minisign -> extração segura -> manifesto interno Minisign -> validação -> confirmação -> instalação.\n"
+}
+
+update_cli() {
+  case "${1:-}" in
+    "") module_update ;;
+    --check|check) check_latest_release ;;
+    --latest|latest) signed_update_latest ;;
+    --tag|tag)
+      [[ -n "${2:-}" ]] || { error "Uso: oneplus update --tag vX.Y.Z"; return 2; }
+      local tag="$2" current tmp json rc
+      [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { error "Tag inválida."; return 2; }
+      current=$(cat /opt/oneplus/VERSION 2>/dev/null || echo 0.0.0)
+      tmp=$(mktemp -d /tmp/oneplus-release-cli.XXXXXX)
+      json="$tmp/release.json"
+      if ! fetch_tag_release_json "$tag" "$json"; then rm -rf -- "$tmp"; return 1; fi
+      install_signed_release_from_json "$json" "$tag" "$current"
+      rc=$?
+      rm -rf -- "$tmp"
+      return "$rc"
+      ;;
+    *) error "Uso: oneplus update [--check|--latest|--tag vX.Y.Z]"; return 2 ;;
+  esac
 }
 
 module_update() {
@@ -252,16 +405,20 @@ module_update() {
     clear
     printf "%bOnePlus • Atualização assinada%b\n\n" "$C_BOLD$C_CYAN" "$C_RESET"
     printf "1) Status/política\n"
-    printf "2) Instalar/alterar chave pública confiável\n"
-    printf "3) Atualizar por GitHub Release assinada\n"
-    printf "4) Limpar rollbacks antigos (manter %s)\n" "$ONEPLUS_UPDATE_KEEP_ROLLBACKS"
+    printf "2) Verificar release estável mais recente\n"
+    printf "3) Instalar/alterar chave pública confiável\n"
+    printf "4) Atualizar para a release estável mais recente\n"
+    printf "5) Atualizar por tag específica assinada\n"
+    printf "6) Limpar rollbacks antigos (manter %s)\n" "$ONEPLUS_UPDATE_KEEP_ROLLBACKS"
     printf "0) Voltar\n\nEscolha: "
     read -r opt
     case "$opt" in
       1) clear; show_update_status; pause ;;
-      2) install_update_public_key; pause ;;
-      3) signed_update_release; pause ;;
-      4) cleanup_update_rollbacks "$ONEPLUS_UPDATE_KEEP_ROLLBACKS"; ok "Rollbacks antigos removidos."; pause ;;
+      2) clear; check_latest_release; pause ;;
+      3) install_update_public_key; pause ;;
+      4) signed_update_latest; pause ;;
+      5) signed_update_release; pause ;;
+      6) cleanup_update_rollbacks "$ONEPLUS_UPDATE_KEEP_ROLLBACKS"; ok "Rollbacks antigos removidos."; pause ;;
       0) return 0 ;;
       *) warn "Opção inválida"; sleep 1 ;;
     esac
