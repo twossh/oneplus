@@ -20,3 +20,16 @@ jobs:
 
       - name: Static validation
         run: bash scripts/validate.sh
+
+      - name: User module static tests
+        run: sudo bash scripts/test-users.sh
+
+      - name: Validate systemd units
+        run: |
+          if [ -e /opt/oneplus ]; then
+            echo '/opt/oneplus já existe no runner; não é seguro sobrescrever.' >&2
+            exit 1
+          fi
+          sudo ln -s "$GITHUB_WORKSPACE" /opt/oneplus
+          trap 'sudo rm -f /opt/oneplus' EXIT
+          systemd-analyze verify systemd/*.service systemd/*.timer

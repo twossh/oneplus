@@ -10,6 +10,7 @@ source "$ROOT_DIR/modules/system.sh"
 source "$ROOT_DIR/modules/ssh.sh"
 source "$ROOT_DIR/modules/badvpn.sh"
 source "$ROOT_DIR/modules/slowdns.sh"
+source "$ROOT_DIR/modules/users.sh"
 
 require_root
 check_supported_os
@@ -39,10 +40,16 @@ health_check() {
   check_item "dnstt-server instalado" test -x /usr/local/lib/oneplus/bin/dnstt-server
   check_item "Unidade BadVPN instalada" systemctl cat oneplus-badvpn.service
   check_item "Unidade SlowDNS instalada" systemctl cat oneplus-slowdns.service
+  check_item "Grupo de usuários OnePlus" getent group oneplus-users
+  check_item "Diretório de metadados de usuários" test -d /var/lib/oneplus/users
+  check_item "Arquivo de limites OnePlus" test -f /etc/security/limits.d/90-oneplus.conf
+  check_item "Unidade de manutenção de usuários" systemctl cat oneplus-user-maintenance.service
+  check_item "Timer de manutenção de usuários" systemctl is-enabled oneplus-user-maintenance.timer
 
   printf "\nOpenSSH: %b\n" "$(service_state ssh.service)"
   printf "BadVPN:  %b\n" "$(service_state oneplus-badvpn.service)"
   printf "SlowDNS: %b\n" "$(service_state oneplus-slowdns.service)"
+  printf "Usuários: %b\n" "$(service_state oneplus-user-maintenance.timer)"
 
   if (( failed )); then
     printf "\n%bVerificação concluída com falhas.%b\n" "$C_RED" "$C_RESET"
@@ -58,6 +65,7 @@ Uso:
   oneplus             Abre o menu interativo
   oneplus --check     Verifica a instalação
   oneplus --version   Mostra a versão
+  oneplus users       Abre a gestão de usuários SSH
   oneplus --help      Mostra esta ajuda
 EOF2
 }
@@ -74,19 +82,21 @@ main_menu() {
     printf "Servidor: %s  |  Sessões: %s\n" "${ipaddr:-N/D}" "$users_online"
     printf "OpenSSH: %-16b BadVPN: %-16b SlowDNS: %b\n\n" \
       "$(service_state ssh.service)" "$(service_state oneplus-badvpn.service)" "$(service_state oneplus-slowdns.service)"
-    printf "1) Sistema e diagnóstico\n"
-    printf "2) OpenSSH\n"
-    printf "3) BadVPN UDPGW\n"
-    printf "4) SlowDNS / DNSTT\n"
-    printf "5) Sobre esta versão\n"
+    printf "1) Usuários SSH\n"
+    printf "2) Sistema e diagnóstico\n"
+    printf "3) OpenSSH\n"
+    printf "4) BadVPN UDPGW\n"
+    printf "5) SlowDNS / DNSTT\n"
+    printf "6) Sobre esta versão\n"
     printf "0) Sair\n\nEscolha: "
     read -r opt
     case "$opt" in
-      1) module_system ;;
-      2) module_ssh ;;
-      3) module_badvpn ;;
-      4) module_slowdns ;;
-      5)
+      1) module_users ;;
+      2) module_system ;;
+      3) module_ssh ;;
+      4) module_badvpn ;;
+      5) module_slowdns ;;
+      6)
         clear
         cat <<EOF2
 OnePlus ${VERSION}
@@ -99,7 +109,9 @@ Princípios:
 - serviços persistentes gerenciados por systemd;
 - sem armazenamento de senhas em texto puro;
 - sem limpeza de crontab, /bin, firewall ou configurações externas;
-- módulos de rede explicitamente habilitados pelo administrador.
+- módulos de rede explicitamente habilitados pelo administrador;
+- contas SSH gerenciadas sem armazenar senhas;
+- expiração e limites aplicados apenas a contas criadas pelo OnePlus.
 EOF2
         pause
         ;;
@@ -113,6 +125,7 @@ case "${1:-}" in
   "") main_menu ;;
   --check) health_check ;;
   --version|-V) printf 'OnePlus %s\n' "$VERSION" ;;
+  users) module_users ;;
   --help|-h) show_help ;;
   *) error "Argumento desconhecido: $1"; show_help; exit 2 ;;
 esac

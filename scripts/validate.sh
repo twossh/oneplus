@@ -8,12 +8,13 @@ fail() { printf '[ERRO] %s\n' "$*" >&2; FAILED=1; }
 ok()   { printf '[OK] %s\n' "$*"; }
 
 required=(
-  VERSION README.md CHANGELOG.md setup.sh install.sh uninstall.sh
+  VERSION README.md CHANGELOG.md setup.sh install.sh uninstall.sh scripts/test-users.sh
   bin/oneplus lib/common.sh lib/os.sh
-  modules/system.sh modules/ssh.sh modules/badvpn.sh modules/slowdns.sh
-  libexec/run-badvpn libexec/run-slowdns
-  defaults/oneplus.conf defaults/badvpn.env defaults/slowdns.env
+  modules/system.sh modules/ssh.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh
+  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance
+  defaults/oneplus.conf defaults/badvpn.env defaults/slowdns.env defaults/users.conf
   systemd/oneplus-badvpn.service systemd/oneplus-slowdns.service
+  systemd/oneplus-user-maintenance.service systemd/oneplus-user-maintenance.timer
 )
 
 for rel in "${required[@]}"; do
@@ -27,7 +28,7 @@ grep -Fq "# OnePlus v${VERSION}" "$ROOT_DIR/README.md" || fail "README não corr
 mapfile -t shell_files < <(
   {
     find "$ROOT_DIR" -type f -name '*.sh' -not -path '*/.git/*' -print
-    printf '%s\n' "$ROOT_DIR/bin/oneplus" "$ROOT_DIR/libexec/run-badvpn" "$ROOT_DIR/libexec/run-slowdns"
+    printf '%s\n' "$ROOT_DIR/bin/oneplus" "$ROOT_DIR/libexec/run-badvpn" "$ROOT_DIR/libexec/run-slowdns" "$ROOT_DIR/libexec/run-user-maintenance"
   } | sort -u
 )
 
@@ -43,8 +44,8 @@ done
 (( FAILED == 0 )) && ok "Sintaxe Bash e finais de linha validados."
 
 executables=(setup.sh install.sh uninstall.sh bin/oneplus lib/common.sh lib/os.sh \
-  modules/system.sh modules/ssh.sh modules/badvpn.sh modules/slowdns.sh \
-  libexec/run-badvpn libexec/run-slowdns scripts/validate.sh)
+  modules/system.sh modules/ssh.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh \
+  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance scripts/validate.sh scripts/test-users.sh)
 for rel in "${executables[@]}"; do
   [[ -x "$ROOT_DIR/$rel" ]] || fail "Permissão executável ausente: $rel"
 done
@@ -76,6 +77,27 @@ if grep -RInE --exclude-dir=.git --exclude='validate.sh' "(^|[[:space:]])(eval|s
   fail "Arquivo .env do OnePlus não deve ser executado com source/eval."
 else
   ok "Leitura segura de arquivos .env validada."
+fi
+
+
+# Proteções obrigatórias do módulo de usuários.
+if ! grep -Fq '(( uid > 0 )) || return 1' "$ROOT_DIR/modules/users.sh"; then
+  fail "Proteção contra UID 0 ausente no módulo de usuários."
+fi
+if ! grep -Fq 'ONEPLUS_USERS_GROUP="oneplus-users"' "$ROOT_DIR/modules/users.sh"; then
+  fail "Grupo isolado de usuários OnePlus não encontrado."
+fi
+if grep -nE 'source[[:space:]]+.*(/var/lib/oneplus/users|user_meta|\.conf)' "$ROOT_DIR/modules/users.sh" >/dev/null 2>&1; then
+  fail "Metadados de usuários não podem ser executados com source."
+else
+  ok "Metadados de usuários são lidos sem execução de código."
+fi
+
+if ! grep -Eq '^DEFAULT_CONNECTION_LIMIT=[0-9]+$' "$ROOT_DIR/defaults/users.conf"; then
+  fail "DEFAULT_CONNECTION_LIMIT inválido."
+fi
+if ! grep -Eq '^DEFAULT_TEST_EXPIRE_ACTION=(lock|delete|delete-home)$' "$ROOT_DIR/defaults/users.conf"; then
+  fail "DEFAULT_TEST_EXPIRE_ACTION inválido."
 fi
 
 if [[ "$FAILED" -ne 0 ]]; then

@@ -9,17 +9,26 @@
 - [x] systemd e journald
 
 ## Fase 2 — Usuários SSH
-- [ ] criar usuário
-- [ ] remover usuário
-- [ ] alterar senha sem armazená-la
-- [ ] expiração por data
-- [ ] usuário teste/temporário
-- [ ] limite simultâneo de conexões
-- [ ] monitor de sessões
-- [ ] remoção segura de expirados via systemd timer
+- [x] criar usuário
+- [x] remover usuário
+- [x] alterar senha sem armazená-la
+- [x] expiração por data/dias
+- [x] usuário teste/temporário
+- [x] limite simultâneo de conexões
+- [x] monitor de conexões
+- [x] tratamento automático seguro de expirados via systemd timer
+- [x] remoção automática de contas temporárias expiradas
+- [x] isolamento por UID original + grupo OnePlus
+
+## Fase 2.1 — Validação real
+- [ ] testar instalação limpa em Ubuntu 24.04 LTS
+- [ ] testar reinstalação sobre v0.1.2
+- [ ] validar limites com shell interativo, SFTP e túnel `ssh -N`
+- [ ] validar expiração de conta teste em ambiente real
+- [ ] validar atualização após reboot
 
 ## Fase 3 — Conectividade
-- [ ] Dropbear moderno, se ainda necessário
+- [ ] Dropbear moderno, somente se necessário
 - [ ] TLS/Stunnel opcional
 - [ ] proxy WebSocket moderno
 - [ ] OpenVPN opcional

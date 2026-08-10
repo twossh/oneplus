@@ -22,7 +22,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
   ca-certificates curl git build-essential \
-  openssh-server iproute2 procps util-linux \
+  openssh-server iproute2 procps util-linux passwd libpam-modules openssl \
   rsync dnsutils lsof less
 
 # dnstt v1.20260501.0 requer Go 1.24+.
@@ -33,6 +33,7 @@ else
 fi
 
 install -d -m 0755 /opt/oneplus /usr/local/lib/oneplus/bin /etc/oneplus /var/lib/oneplus
+install -d -m 0700 /var/lib/oneplus/users
 rsync -a --delete \
   --exclude '.git' \
   --exclude '.github' \
@@ -42,7 +43,7 @@ rsync -a --delete \
   "$SELF_DIR/" /opt/oneplus/
 
 find /opt/oneplus -type f -name '*.sh' -exec chmod 0755 {} +
-chmod 0755 /opt/oneplus/bin/oneplus /opt/oneplus/libexec/run-badvpn /opt/oneplus/libexec/run-slowdns
+chmod 0755 /opt/oneplus/bin/oneplus /opt/oneplus/libexec/run-badvpn /opt/oneplus/libexec/run-slowdns /opt/oneplus/libexec/run-user-maintenance
 chmod 0644 /opt/oneplus/VERSION /opt/oneplus/README.md /opt/oneplus/CHANGELOG.md 2>/dev/null || true
 
 if ! getent passwd oneplus-badvpn >/dev/null; then
@@ -51,26 +52,36 @@ fi
 if ! getent passwd oneplus-dnstt >/dev/null; then
   useradd --system --no-create-home --shell /usr/sbin/nologin oneplus-dnstt
 fi
+if ! getent group oneplus-users >/dev/null; then
+  groupadd --system oneplus-users
+fi
 
 [[ -e /etc/oneplus/oneplus.conf ]] || install -m 0644 /opt/oneplus/defaults/oneplus.conf /etc/oneplus/oneplus.conf
 [[ -e /etc/oneplus/badvpn.env ]] || install -m 0640 -o root -g oneplus-badvpn /opt/oneplus/defaults/badvpn.env /etc/oneplus/badvpn.env
 [[ -e /etc/oneplus/slowdns.env ]] || install -m 0640 -o root -g oneplus-dnstt /opt/oneplus/defaults/slowdns.env /etc/oneplus/slowdns.env
+[[ -e /etc/oneplus/users.conf ]] || install -m 0644 -o root -g root /opt/oneplus/defaults/users.conf /etc/oneplus/users.conf
 chown root:root /etc/oneplus/oneplus.conf && chmod 0644 /etc/oneplus/oneplus.conf
 chown root:oneplus-badvpn /etc/oneplus/badvpn.env && chmod 0640 /etc/oneplus/badvpn.env
 chown root:oneplus-dnstt /etc/oneplus/slowdns.env && chmod 0640 /etc/oneplus/slowdns.env
+chown root:root /etc/oneplus/users.conf && chmod 0644 /etc/oneplus/users.conf
 install -d -m 0750 -o root -g oneplus-dnstt /etc/oneplus/slowdns
 
 install -m 0644 /opt/oneplus/systemd/oneplus-badvpn.service /etc/systemd/system/oneplus-badvpn.service
 install -m 0644 /opt/oneplus/systemd/oneplus-slowdns.service /etc/systemd/system/oneplus-slowdns.service
+install -m 0644 /opt/oneplus/systemd/oneplus-user-maintenance.service /etc/systemd/system/oneplus-user-maintenance.service
+install -m 0644 /opt/oneplus/systemd/oneplus-user-maintenance.timer /etc/systemd/system/oneplus-user-maintenance.timer
 ln -sfn /opt/oneplus/bin/oneplus /usr/local/bin/oneplus
 
 if command -v systemd-analyze >/dev/null 2>&1; then
   info "Validando unidades systemd..."
   systemd-analyze verify \
     /etc/systemd/system/oneplus-badvpn.service \
-    /etc/systemd/system/oneplus-slowdns.service
+    /etc/systemd/system/oneplus-slowdns.service \
+    /etc/systemd/system/oneplus-user-maintenance.service \
+    /etc/systemd/system/oneplus-user-maintenance.timer
 fi
 systemctl daemon-reload
+/opt/oneplus/modules/users.sh init
 
 info "Instalando BadVPN UDPGW (compatibilidade SSH UDP)..."
 /opt/oneplus/modules/badvpn.sh install-binary
@@ -90,7 +101,10 @@ if [[ "$(readlink -f /usr/local/bin/oneplus)" != "/opt/oneplus/bin/oneplus" ]]; 
   exit 1
 fi
 
+systemctl enable --now oneplus-user-maintenance.timer
+
 printf "\n%bInstalação concluída.%b\n" "$C_GREEN" "$C_RESET"
 printf "Execute: %boneplus%b\n" "$C_BOLD" "$C_RESET"
 printf "Verifique: %boneplus --check%b\n" "$C_BOLD" "$C_RESET"
 printf "BadVPN e SlowDNS foram instalados, mas permanecem desabilitados até serem configurados no menu.\n"
+printf "A manutenção segura de expiração/limites de usuários está ativa via systemd timer.\n"

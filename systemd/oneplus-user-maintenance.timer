@@ -1,0 +1,11 @@
+[Unit]
+Description=Run OnePlus SSH user maintenance periodically
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=15s
+AccuracySec=1s
+Unit=oneplus-user-maintenance.service
+
+[Install]
+WantedBy=timers.target

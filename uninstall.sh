@@ -9,8 +9,11 @@ printf "Digite REMOVER para continuar: "
 read -r confirm
 [[ "$confirm" == "REMOVER" ]] || { info "Cancelado."; exit 0; }
 
-systemctl disable --now oneplus-badvpn.service oneplus-slowdns.service 2>/dev/null || true
-rm -f /etc/systemd/system/oneplus-badvpn.service /etc/systemd/system/oneplus-slowdns.service
+systemctl disable --now oneplus-badvpn.service oneplus-slowdns.service oneplus-user-maintenance.timer 2>/dev/null || true
+systemctl stop oneplus-user-maintenance.service 2>/dev/null || true
+rm -f /etc/systemd/system/oneplus-badvpn.service /etc/systemd/system/oneplus-slowdns.service \
+  /etc/systemd/system/oneplus-user-maintenance.service /etc/systemd/system/oneplus-user-maintenance.timer
+rm -f /etc/security/limits.d/90-oneplus.conf
 rm -f /usr/local/bin/oneplus
 rm -rf /opt/oneplus /usr/local/lib/oneplus
 if [[ -e /etc/ssh/sshd_config.d/60-oneplus.conf ]]; then
@@ -28,4 +31,5 @@ if [[ -e /etc/ssh/sshd_config.d/60-oneplus.conf ]]; then
   fi
 fi
 systemctl daemon-reload
-ok "Executáveis e serviços OnePlus removidos. /etc/oneplus foi preservado para segurança/backup."
+ok "Executáveis e serviços OnePlus removidos. /etc/oneplus e os metadados foram preservados para segurança/backup."
+warn "Contas SSH criadas pelo OnePlus não foram removidas automaticamente."

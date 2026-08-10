@@ -28,7 +28,7 @@ module_system() {
         pause
         ;;
       3)
-        systemctl --no-pager --full status oneplus-badvpn.service oneplus-slowdns.service 2>/dev/null || true
+        systemctl --no-pager --full status oneplus-badvpn.service oneplus-slowdns.service oneplus-user-maintenance.timer 2>/dev/null || true
         pause
         ;;
       0) return 0 ;;

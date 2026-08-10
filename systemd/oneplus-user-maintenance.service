@@ -1,0 +1,20 @@
+[Unit]
+Description=OnePlus SSH user expiration and connection-limit maintenance
+After=systemd-user-sessions.service ssh.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/oneplus/libexec/run-user-maintenance
+UMask=0077
+Nice=10
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target
