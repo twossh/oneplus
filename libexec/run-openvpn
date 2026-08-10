@@ -7,13 +7,19 @@ CA="$PKI/ca.crt"
 CERT="$PKI/server.crt"
 KEY="$PKI/server.key"
 TLS_CRYPT=/etc/oneplus/openvpn/tls-crypt.key
+TLS_CRYPT_V2=/etc/oneplus/openvpn/tls-crypt-v2-server.key
 CRL=/etc/oneplus/openvpn/ca-db/crl.pem
+ROTATION=/etc/oneplus/openvpn/rotation
+ROTATION_STATE="$ROTATION/state.conf"
+ROTATION_CA_BUNDLE="$ROTATION/ca-bundle.crt"
+ROTATION_CRL_BUNDLE="$ROTATION/crl-bundle.pem"
+ROTATION_TLS_CRYPT_V2="$ROTATION/next/tls-crypt-v2-server.key"
 RUNTIME_DIR=/run/oneplus-openvpn
 RUNTIME_CONF="$RUNTIME_DIR/server.conf"
 PAM_SERVICE=/etc/pam.d/oneplus-openvpn
 
 [[ -r "$CONF" ]] || { echo "Configuração ausente: $CONF" >&2; exit 1; }
-[[ -s "$CA" && -s "$CERT" && -s "$KEY" && -s "$TLS_CRYPT" ]] || { echo "PKI OpenVPN incompleta." >&2; exit 1; }
+[[ -s "$CA" && -s "$CERT" && -s "$KEY" ]] || { echo "PKI OpenVPN incompleta." >&2; exit 1; }
 [[ -r "$PAM_SERVICE" ]] || { echo "Serviço PAM OnePlus OpenVPN ausente." >&2; exit 1; }
 command -v openvpn >/dev/null 2>&1 || { echo "openvpn não instalado." >&2; exit 1; }
 
@@ -53,6 +59,7 @@ full_tunnel=$(getv OPENVPN_FULL_TUNNEL)
 push_dns1=$(getv OPENVPN_PUSH_DNS1)
 push_dns2=$(getv OPENVPN_PUSH_DNS2)
 auth_mode=$(getv OPENVPN_AUTH_MODE); auth_mode=${auth_mode:-password}
+tls_crypt_mode=$(getv OPENVPN_TLS_CRYPT_MODE); tls_crypt_mode=${tls_crypt_mode:-legacy}
 
 valid_ipv4 "$bind" || { echo "OPENVPN_BIND inválido." >&2; exit 1; }
 valid_port "$port" || { echo "OPENVPN_PORT inválido." >&2; exit 1; }
@@ -61,11 +68,30 @@ valid_private_24 "$network" || { echo "OPENVPN_NETWORK deve ser rede privada RFC
 valid_uint "$max_clients" && (( 10#$max_clients >= 1 && 10#$max_clients <= 250 )) || { echo "OPENVPN_MAX_CLIENTS inválido (1..250)." >&2; exit 1; }
 [[ "$full_tunnel" == yes || "$full_tunnel" == no ]] || { echo "OPENVPN_FULL_TUNNEL deve ser yes/no." >&2; exit 1; }
 [[ "$auth_mode" == password || "$auth_mode" == hybrid ]] || { echo "OPENVPN_AUTH_MODE deve ser password ou hybrid." >&2; exit 1; }
+[[ "$tls_crypt_mode" == legacy || "$tls_crypt_mode" == dual || "$tls_crypt_mode" == v2 ]] || { echo "OPENVPN_TLS_CRYPT_MODE deve ser legacy, dual ou v2." >&2; exit 1; }
 [[ -z "$push_dns1" ]] || valid_ipv4 "$push_dns1" || { echo "OPENVPN_PUSH_DNS1 inválido." >&2; exit 1; }
 [[ -z "$push_dns2" ]] || valid_ipv4 "$push_dns2" || { echo "OPENVPN_PUSH_DNS2 inválido." >&2; exit 1; }
+CA_EFFECTIVE="$CA"
+CRL_EFFECTIVE="$CRL"
+TLS_CRYPT_V2_EFFECTIVE="$TLS_CRYPT_V2"
+case "$tls_crypt_mode" in
+  legacy)
+    [[ -s "$TLS_CRYPT" ]] || { echo "Modo legacy exige tls-crypt.key." >&2; exit 1; }
+    ;;
+  dual)
+    [[ -r "$ROTATION_STATE" ]] && grep -Fqx 'STATE=prepared' "$ROTATION_STATE" || { echo "Modo dual exige rotação preparada." >&2; exit 1; }
+    [[ -s "$TLS_CRYPT" && -s "$ROTATION_TLS_CRYPT_V2" && -s "$ROTATION_CA_BUNDLE" && -s "$ROTATION_CRL_BUNDLE" ]] || { echo "Materiais de migração OpenVPN incompletos." >&2; exit 1; }
+    CA_EFFECTIVE="$ROTATION_CA_BUNDLE"
+    CRL_EFFECTIVE="$ROTATION_CRL_BUNDLE"
+    TLS_CRYPT_V2_EFFECTIVE="$ROTATION_TLS_CRYPT_V2"
+    ;;
+  v2)
+    [[ -s "$TLS_CRYPT_V2" ]] || { echo "Modo v2 exige tls-crypt-v2-server.key." >&2; exit 1; }
+    ;;
+esac
 if [[ "$auth_mode" == hybrid ]]; then
-  [[ -s "$CRL" ]] || { echo "Modo hybrid exige CRL válida: $CRL" >&2; exit 1; }
-  openssl crl -in "$CRL" -noout -verify -CAfile "$CA" >/dev/null 2>&1 || { echo "CRL OpenVPN inválida." >&2; exit 1; }
+  [[ -s "$CRL_EFFECTIVE" ]] || { echo "Modo hybrid exige CRL válida: $CRL_EFFECTIVE" >&2; exit 1; }
+  openssl verify -crl_check -CAfile "$CA_EFFECTIVE" -CRLfile "$CRL_EFFECTIVE" "$CERT" >/dev/null 2>&1 || { echo "CA/CRL OpenVPN inválida para o certificado do servidor." >&2; exit 1; }
 fi
 
 plugin=$(find /usr/lib -type f -name 'openvpn-plugin-auth-pam.so' -print -quit 2>/dev/null || true)
@@ -88,11 +114,10 @@ proto ${ovpn_proto}
 dev tun
 topology subnet
 server ${network} 255.255.255.0
-ca ${CA}
+ca ${CA_EFFECTIVE}
 cert ${CERT}
 key ${KEY}
 dh none
-tls-crypt ${TLS_CRYPT}
 tls-version-min 1.2
 username-as-common-name
 plugin ${plugin} oneplus-openvpn
@@ -112,11 +137,25 @@ verb 3
 mute 10
 EOF2
 
+case "$tls_crypt_mode" in
+  legacy) printf 'tls-crypt %s\n' "$TLS_CRYPT" >> "$RUNTIME_CONF" ;;
+  dual)
+    printf 'tls-crypt %s\n' "$TLS_CRYPT" >> "$RUNTIME_CONF"
+    printf 'tls-crypt-v2 %s\n' "$TLS_CRYPT_V2_EFFECTIVE" >> "$RUNTIME_CONF"
+    ;;
+  v2) printf 'tls-crypt-v2 %s\n' "$TLS_CRYPT_V2_EFFECTIVE" >> "$RUNTIME_CONF" ;;
+esac
+
 if [[ "$auth_mode" == hybrid ]]; then
+  [[ -x /opt/oneplus/libexec/openvpn_bind_identity.py ]] || { echo "Validador certificado/usuário OpenVPN ausente." >&2; exit 1; }
+  [[ -d /var/lib/oneplus/openvpn-authz ]] || { echo "Mapa certificado/usuário OpenVPN ausente." >&2; exit 1; }
   cat >> "$RUNTIME_CONF" <<EOF2
 verify-client-cert require
 remote-cert-tls client
-crl-verify ${CRL}
+crl-verify ${CRL_EFFECTIVE}
+script-security 2
+tmp-dir /dev/shm
+auth-user-pass-verify /opt/oneplus/libexec/openvpn_bind_identity.py via-file
 EOF2
 else
   printf 'verify-client-cert none\n' >> "$RUNTIME_CONF"

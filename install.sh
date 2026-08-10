@@ -35,7 +35,7 @@ apt-get install -y --no-install-recommends \
 
 info "Validando componentes Python após instalar dependências..."
 PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/oneplus-install-pycache.$$" python3 -m py_compile \
-  "$SELF_DIR/libexec/websocket_proxy.py" "$SELF_DIR/libexec/openvpn_manager.py" "$SELF_DIR/libexec/release_verify.py" "$SELF_DIR/libexec/github_release.py" "$SELF_DIR/scripts/test-websocket.py" "$SELF_DIR/scripts/test-release.py" "$SELF_DIR/scripts/test-update-metadata.py"
+  "$SELF_DIR/libexec/websocket_proxy.py" "$SELF_DIR/libexec/openvpn_manager.py" "$SELF_DIR/libexec/openvpn_bind_identity.py" "$SELF_DIR/libexec/release_verify.py" "$SELF_DIR/libexec/github_release.py" "$SELF_DIR/scripts/test-websocket.py" "$SELF_DIR/scripts/test-release.py" "$SELF_DIR/scripts/test-update-metadata.py"
 rm -rf -- "${TMPDIR:-/tmp}/oneplus-install-pycache.$$" 2>/dev/null || true
 
 # dnstt v1.20260501.0 requer Go 1.24+.
@@ -111,10 +111,13 @@ ensure_env_key /etc/oneplus/openvpn.env OPENVPN_FULL_TUNNEL no
 ensure_env_key /etc/oneplus/openvpn.env OPENVPN_PUSH_DNS1 ""
 ensure_env_key /etc/oneplus/openvpn.env OPENVPN_PUSH_DNS2 ""
 ensure_env_key /etc/oneplus/openvpn.env OPENVPN_AUTH_MODE password
+ensure_env_key /etc/oneplus/openvpn.env OPENVPN_TLS_CRYPT_MODE legacy
 install -d -m 0750 -o root -g oneplus-dnstt /etc/oneplus/slowdns
 install -d -m 0750 -o root -g oneplus-tls /etc/oneplus/tls
 install -d -m 0711 -o root -g root /etc/oneplus/openvpn /etc/oneplus/openvpn/ca-db
 install -d -m 0700 -o root -g root /etc/oneplus/openvpn/pki /etc/oneplus/openvpn/clients
+install -d -m 0700 -o root -g root /var/lib/oneplus/openvpn-pki-archives
+install -d -m 0711 -o root -g root /var/lib/oneplus/openvpn-authz
 
 install -m 0644 /opt/oneplus/systemd/oneplus-badvpn.service /etc/systemd/system/oneplus-badvpn.service
 install -m 0644 /opt/oneplus/systemd/oneplus-slowdns.service /etc/systemd/system/oneplus-slowdns.service

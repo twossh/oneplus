@@ -68,27 +68,27 @@ Os dois arquivos em `release/` devem ser commitados. Os três arquivos em `dist/
 
 ## 4. Commit, tag e GitHub Release
 
-Exemplo para a v0.5.2:
+Exemplo para a v0.6.1:
 
 ```bash
 git add release/SHA256SUMS release/SHA256SUMS.minisig
-git commit -m "Release v0.5.2"
-git tag v0.5.2
+git commit -m "Release v0.6.1"
+git tag v0.6.1
 git push origin main --tags
 ```
 
 No GitHub, crie uma Release para a **mesma tag** e anexe exatamente:
 
 ```text
-OnePlus-v0.5.2.tar.gz
-OnePlus-v0.5.2.tar.gz.sha256
-OnePlus-v0.5.2.tar.gz.sha256.minisig
+OnePlus-v0.6.1.tar.gz
+OnePlus-v0.6.1.tar.gz.sha256
+OnePlus-v0.6.1.tar.gz.sha256.minisig
 ```
 
 
 ### Consultar a release antes de instalar
 
-Na v0.5.2, o administrador não precisa mais digitar uma tag apenas para descobrir a versão disponível:
+Desde a v0.5.2, o administrador não precisa digitar uma tag apenas para descobrir a versão disponível:
 
 ```bash
 oneplus update --check
@@ -105,7 +105,7 @@ oneplus update --latest
 Ou uma tag específica:
 
 ```bash
-oneplus update --tag v0.5.2
+oneplus update --tag v0.6.1
 ```
 
 Em ambos os casos, Minisign, SHA-256, inspeção segura do TAR, manifesto interno, validação estática e confirmação manual continuam obrigatórios.

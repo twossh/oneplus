@@ -1,4 +1,4 @@
-# OnePlus v0.6.0
+# OnePlus v0.6.1
 
 Gerenciador CLI de usuários, SSH, VPN e serviços de conectividade para Ubuntu 24.04 ou superior, administrado exclusivamente pelo terminal.
 
@@ -17,7 +17,7 @@ apt-get update && apt-get install -y curl ca-certificates && bash <(curl -fsSL h
 Para uma tag/branch específica:
 
 ```bash
-ONEPLUS_REF=v0.6.0 bash <(curl -fsSL https://raw.githubusercontent.com/twossh/oneplus/main/setup.sh)
+ONEPLUS_REF=v0.6.1 bash <(curl -fsSL https://raw.githubusercontent.com/twossh/oneplus/main/setup.sh)
 ```
 
 Depois:
@@ -49,7 +49,7 @@ oneplus --check
 
 ## OpenVPN mTLS opcional por dispositivo
 
-A v0.6.0 mantém o modo padrão compatível de **usuário/senha via PAM**, mas adiciona um segundo modo opcional: **usuário/senha + certificado mTLS individual por dispositivo**. O certificado não substitui a conta OnePlus; ele funciona como um segundo fator criptográfico.
+A v0.6.1 mantém o modo padrão compatível de **usuário/senha via PAM**, mas adiciona um segundo modo opcional: **usuário/senha + certificado mTLS individual por dispositivo**. O certificado não substitui a conta OnePlus; ele funciona como um segundo fator criptográfico.
 
 No modo híbrido, cada Android, iPhone, notebook ou outro dispositivo recebe um certificado próprio. O servidor exige `verify-client-cert require`, EKU de cliente e consulta uma CRL local antes de concluir a autenticação PAM.
 
@@ -63,7 +63,23 @@ Pelo menu `oneplus openvpn` é possível:
 
 A chave privada do dispositivo é criada em diretório temporário, embutida apenas no perfil `0600` exportado e apagada do servidor em seguida. O servidor conserva somente o certificado público e metadados necessários para revogação.
 
-A manutenção da janela de migração roda por `oneplus-openvpn-pki-maintenance.timer` a cada cinco minutos. Ao fim da janela, o certificado antigo é revogado e a CRL é regenerada. A CA raiz, a chave `tls-crypt` e o certificado do servidor **não são rotacionados automaticamente nesta versão**.
+No modo híbrido, a v0.6.1 também vincula o **serial do certificado à conta OnePlus**. O PAM continua validando a senha, enquanto um segundo verificador `via-file` confirma que o certificado apresentado foi emitido para o mesmo usuário. A senha não é lida por esse verificador. O mapa derivado fica em `/var/lib/oneplus/openvpn-authz`, contém somente `serial -> usuário`, é root-owned e não permite listagem por usuários comuns. Isso impede usar o certificado válido de um cliente como segundo fator junto da senha de outro cliente.
+
+A manutenção da janela de migração de certificados de dispositivo roda por `oneplus-openvpn-pki-maintenance.timer` a cada cinco minutos. Ao fim da janela, o certificado antigo é revogado e a CRL é regenerada.
+
+A v0.6.1 também adiciona uma **rotação coordenada da infraestrutura OpenVPN**, deliberadamente manual:
+
+- pode rotacionar somente o certificado do servidor mantendo a CA;
+- pode preparar uma nova CA, novo certificado de servidor e uma chave `tls-crypt-v2`;
+- durante a preparação, a CA antiga e a nova coexistem em um bundle e o servidor aceita simultaneamente o `tls-crypt` legado e `tls-crypt-v2`;
+- novos perfis de migração usam a próxima CA e uma chave `tls-crypt-v2` individual;
+- um perfil da próxima geração pode ser revogado antes do cutover e reemitido sem cancelar toda a rotação;
+- o OnePlus mostra quais dispositivos ainda não receberam perfil da nova geração;
+- a promoção final exige confirmação explícita e nunca é executada pelo timer;
+- antes da promoção é criado um rollback root-only em `/var/lib/oneplus/openvpn-pki-archives`;
+- se o novo serviço não subir ou a PKI falhar na validação, a geração anterior é restaurada.
+
+O OnePlus consegue comprovar que um perfil novo foi **emitido**, mas não consegue saber se ele foi realmente importado/testado no dispositivo. Por isso a finalização continua sendo uma decisão do administrador. Perfis antigos deixam de funcionar depois da promoção da nova CA. Veja `docs/OPENVPN-PKI-ROTATION.md`.
 
 ## Fase 4 — Operação e segurança
 
@@ -162,7 +178,7 @@ Comandos diretos:
 ```bash
 oneplus update --check
 oneplus update --latest
-oneplus update --tag v0.5.2
+oneplus update --tag v0.6.1
 ```
 
 `--check` apenas consulta e informa; não instala nada. `--latest` e `--tag` continuam exigindo chave Minisign confiável, validação completa e confirmação `ATUALIZAR`.

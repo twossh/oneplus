@@ -8,10 +8,10 @@ fail() { printf '[ERRO] %s\n' "$*" >&2; FAILED=1; }
 ok()   { printf '[OK] %s\n' "$*"; }
 
 required=(
-  VERSION README.md CHANGELOG.md docs/RELEASES.md release/README.md setup.sh install.sh uninstall.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-operations.sh scripts/test-release.py scripts/test-update-metadata.py scripts/fix-permissions.sh scripts/git-fix-modes.sh scripts/release-keygen.sh scripts/release-prepare.sh scripts/release-sign.sh
+  VERSION README.md CHANGELOG.md docs/RELEASES.md docs/OPENVPN-PKI-ROTATION.md release/README.md setup.sh install.sh uninstall.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-operations.sh scripts/test-release.py scripts/test-update-metadata.py scripts/fix-permissions.sh scripts/git-fix-modes.sh scripts/release-keygen.sh scripts/release-prepare.sh scripts/release-sign.sh
   bin/oneplus lib/common.sh lib/os.sh
   modules/system.sh modules/ssh.sh modules/dropbear.sh modules/websocket.sh modules/tls.sh modules/openvpn.sh modules/mux.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh modules/firewall.sh modules/backup.sh modules/reports.sh modules/diagnostics.sh modules/update.sh
-  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-openvpn-pki-maintenance libexec/run-mux libexec/run-firewall libexec/websocket_proxy.py libexec/openvpn_manager.py libexec/release_verify.py libexec/github_release.py
+  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-openvpn-pki-maintenance libexec/run-mux libexec/run-firewall libexec/websocket_proxy.py libexec/openvpn_manager.py libexec/openvpn_bind_identity.py libexec/release_verify.py libexec/github_release.py
   defaults/oneplus.conf defaults/badvpn.env defaults/slowdns.env defaults/users.conf defaults/dropbear.env defaults/websocket.env defaults/tls.env defaults/openvpn.env defaults/mux.env defaults/firewall.env
   systemd/oneplus-badvpn.service systemd/oneplus-slowdns.service systemd/oneplus-dropbear.service systemd/oneplus-websocket.service systemd/oneplus-tls.service systemd/oneplus-openvpn.service systemd/oneplus-openvpn-pki-maintenance.service systemd/oneplus-openvpn-pki-maintenance.timer systemd/oneplus-mux.service systemd/oneplus-firewall.service
   systemd/oneplus-user-maintenance.service systemd/oneplus-user-maintenance.timer
@@ -47,7 +47,7 @@ done
 
 executables=(setup.sh install.sh uninstall.sh bin/oneplus lib/common.sh lib/os.sh \
   modules/system.sh modules/ssh.sh modules/dropbear.sh modules/websocket.sh modules/tls.sh modules/openvpn.sh modules/mux.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh modules/firewall.sh modules/backup.sh modules/reports.sh modules/diagnostics.sh modules/update.sh \
-  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-openvpn-pki-maintenance libexec/run-mux libexec/run-firewall libexec/websocket_proxy.py libexec/openvpn_manager.py libexec/release_verify.py libexec/github_release.py \
+  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-openvpn-pki-maintenance libexec/run-mux libexec/run-firewall libexec/websocket_proxy.py libexec/openvpn_manager.py libexec/openvpn_bind_identity.py libexec/release_verify.py libexec/github_release.py \
   scripts/validate.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-operations.sh scripts/test-release.py scripts/test-update-metadata.py scripts/fix-permissions.sh scripts/git-fix-modes.sh scripts/release-keygen.sh scripts/release-prepare.sh scripts/release-sign.sh scripts/test-websocket.py scripts/test-update-metadata.py)
 for rel in "${executables[@]}"; do
   [[ -x "$ROOT_DIR/$rel" ]] || fail "Permissão executável ausente: $rel"
@@ -110,7 +110,7 @@ fi
 
 
 if command -v python3 >/dev/null 2>&1; then
-  if ! PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/oneplus-pycache.$$" python3 -m py_compile "$ROOT_DIR/libexec/websocket_proxy.py" "$ROOT_DIR/libexec/openvpn_manager.py" "$ROOT_DIR/libexec/release_verify.py" "$ROOT_DIR/libexec/github_release.py" "$ROOT_DIR/scripts/test-websocket.py" "$ROOT_DIR/scripts/test-release.py" "$ROOT_DIR/scripts/test-update-metadata.py"; then
+  if ! PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/oneplus-pycache.$$" python3 -m py_compile "$ROOT_DIR/libexec/websocket_proxy.py" "$ROOT_DIR/libexec/openvpn_manager.py" "$ROOT_DIR/libexec/openvpn_bind_identity.py" "$ROOT_DIR/libexec/release_verify.py" "$ROOT_DIR/libexec/github_release.py" "$ROOT_DIR/scripts/test-websocket.py" "$ROOT_DIR/scripts/test-release.py" "$ROOT_DIR/scripts/test-update-metadata.py"; then
     fail "Erro de sintaxe Python em componente OnePlus."
   else
     ok "Sintaxe Python dos componentes validada."
@@ -158,7 +158,7 @@ fi
 if ! grep -Fq 'verify-client-cert none' "$ROOT_DIR/libexec/run-openvpn" || \
    ! grep -Fq 'verify-client-cert require' "$ROOT_DIR/libexec/run-openvpn" || \
    ! grep -Fq 'remote-cert-tls client' "$ROOT_DIR/libexec/run-openvpn" || \
-   ! grep -Fq 'crl-verify ${CRL}' "$ROOT_DIR/libexec/run-openvpn" || \
+   ! grep -Fq 'crl-verify ${CRL_EFFECTIVE}' "$ROOT_DIR/libexec/run-openvpn" || \
    ! grep -Fq 'username-as-common-name' "$ROOT_DIR/libexec/run-openvpn" || \
    ! grep -Fq 'plugin ${plugin} oneplus-openvpn' "$ROOT_DIR/libexec/run-openvpn"; then
   fail "OpenVPN não contém os modos password + mTLS híbrido esperados."
@@ -167,6 +167,16 @@ else
 fi
 if ! grep -Eq '^OPENVPN_AUTH_MODE=password$' "$ROOT_DIR/defaults/openvpn.env"; then
   fail "OPENVPN_AUTH_MODE padrão deve permanecer password para compatibilidade."
+fi
+if ! grep -Eq '^OPENVPN_TLS_CRYPT_MODE=legacy$' "$ROOT_DIR/defaults/openvpn.env"; then
+  fail "OPENVPN_TLS_CRYPT_MODE padrão deve permanecer legacy para preservar perfis existentes."
+fi
+if ! grep -Fq "printf 'tls-crypt %s\n'" "$ROOT_DIR/libexec/run-openvpn" || \
+   ! grep -Fq "printf 'tls-crypt-v2 %s\n'" "$ROOT_DIR/libexec/run-openvpn" || \
+   ! grep -Fq 'OPENVPN_TLS_CRYPT_MODE deve ser legacy, dual ou v2.' "$ROOT_DIR/libexec/run-openvpn"; then
+  fail "Runtime OpenVPN não contém os três estados seguros do canal de controle (legacy/dual/v2)."
+else
+  ok "OpenVPN suporta migração controlada tls-crypt -> tls-crypt-v2."
 fi
 if grep -Fq 'client-cert-not-required' "$ROOT_DIR/libexec/run-openvpn" || grep -Fq 'duplicate-cn' "$ROOT_DIR/libexec/run-openvpn"; then
   fail "OpenVPN contém opção removida/incompatível ou duplicate-cn."
@@ -188,6 +198,16 @@ if ! grep -Fq 'user ingroup oneplus-users' "$ROOT_DIR/modules/openvpn.sh" || \
 else
   ok "PAM OpenVPN nega root e restringe acesso às contas gerenciadas pelo OnePlus."
 fi
+if ! grep -Fq 'auth-user-pass-verify /opt/oneplus/libexec/openvpn_bind_identity.py via-file' "$ROOT_DIR/libexec/run-openvpn" || \
+   ! grep -Fq 'tls_serial_hex_0' "$ROOT_DIR/libexec/openvpn_bind_identity.py" || \
+   ! grep -Fq 'rebuild_openvpn_authz' "$ROOT_DIR/modules/openvpn.sh"; then
+  fail "mTLS OpenVPN precisa vincular o serial do certificado ao usuário autenticado."
+else
+  ok "mTLS vincula certificado/dispositivo à conta OnePlus sem ler a senha no helper."
+fi
+if grep -Fq 'via-env' "$ROOT_DIR/libexec/run-openvpn"; then
+  fail "Binding mTLS não deve expor senha em variável de ambiente; use via-file."
+fi
 if ! grep -Fq 'management ${RUNTIME_DIR}/management.sock unix' "$ROOT_DIR/libexec/run-openvpn" || \
    ! grep -Fq 'management-client-user root' "$ROOT_DIR/libexec/run-openvpn"; then
   fail "Interface de gerenciamento OpenVPN deve ser UNIX socket restrito a root."
@@ -205,6 +225,20 @@ if ! grep -Fq 'extendedKeyUsage = clientAuth' "$ROOT_DIR/modules/openvpn.sh" || 
   fail "PKI de dispositivo/CRL/rotação assistida OpenVPN incompleta."
 else
   ok "mTLS por dispositivo, CRL e janela de rotação estão presentes."
+fi
+if ! grep -Fq 'FINALIZAR-FORCAR' "$ROOT_DIR/modules/openvpn.sh" || \
+   ! grep -Fq 'OPENVPN_ROTATION_CA_BUNDLE' "$ROOT_DIR/modules/openvpn.sh" || \
+   ! grep -Fq 'OPENVPN_ROTATION_CRL_BUNDLE' "$ROOT_DIR/modules/openvpn.sh" || \
+   ! grep -Fq 'tls-crypt-v2-client' "$ROOT_DIR/modules/openvpn.sh" || \
+   ! grep -Fq 'pre-finalize.tar.gz' "$ROOT_DIR/modules/openvpn.sh"; then
+  fail "Rotação coordenada de CA/servidor/tls-crypt-v2 incompleta."
+else
+  ok "Rotação coordenada OpenVPN contém fase dual, perfis v2, confirmação e rollback."
+fi
+if grep -Fq 'finalize_infrastructure_rotation' "$ROOT_DIR/libexec/run-openvpn-pki-maintenance"; then
+  fail "Timer de PKI não pode promover uma nova CA automaticamente."
+else
+  ok "Promoção da CA permanece exclusivamente manual."
 fi
 if grep -Eq 'client\.key[^[:cntrl:]]*(install|cp)[^[:cntrl:]]*OPENVPN' "$ROOT_DIR/modules/openvpn.sh"; then
   fail "Chaves privadas de dispositivos não podem ser persistidas no servidor."

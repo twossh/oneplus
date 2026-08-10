@@ -32,8 +32,15 @@ diagnostics_run() {
   diag_cmd "age disponível" command -v age
   diag_cmd "minisign disponível" command -v minisign
   diag_cmd "Config OpenVPN" test -r /etc/oneplus/openvpn.env
-  if grep -Fqx 'OPENVPN_AUTH_MODE=hybrid' /etc/oneplus/openvpn.env 2>/dev/null; then
-    diag_cmd "CRL mTLS OpenVPN" openssl crl -in /etc/oneplus/openvpn/ca-db/crl.pem -noout -verify -CAfile /etc/oneplus/openvpn/pki/ca.crt
+  diag_cmd "Modo tls-crypt OpenVPN válido" bash -c 'm=$(awk -F= '"'"'$1=="OPENVPN_TLS_CRYPT_MODE"{print $2;exit}'"'"' /etc/oneplus/openvpn.env 2>/dev/null); [[ -z "$m" || "$m" == legacy || "$m" == dual || "$m" == v2 ]]'
+  if [[ -s /etc/oneplus/openvpn/pki/server.crt ]]; then
+    diag_cmd "Saúde da PKI OpenVPN" /opt/oneplus/modules/openvpn.sh health
+  fi
+  if [[ -f /etc/oneplus/openvpn.env ]] && grep -Fq 'OPENVPN_AUTH_MODE=hybrid' /etc/oneplus/openvpn.env; then
+    diag_cmd "Binding mTLS certificado/usuário" bash -c 'test -x /opt/oneplus/libexec/openvpn_bind_identity.py && test -d /var/lib/oneplus/openvpn-authz && test "$(stat -c %a /var/lib/oneplus/openvpn-authz)" = 711'
+  fi
+  if [[ -r /etc/oneplus/openvpn/rotation/state.conf ]]; then
+    diag_cmd "Rotação PKI OpenVPN consistente" bash -c "grep -Fqx 'STATE=prepared' /etc/oneplus/openvpn/rotation/state.conf && test -s /etc/oneplus/openvpn/rotation/ca-bundle.crt && test -s /etc/oneplus/openvpn/rotation/crl-bundle.pem && test -s /etc/oneplus/openvpn/rotation/next/tls-crypt-v2-server.key"
   fi
   diag_cmd "Config firewall" test -r /etc/oneplus/firewall.env
 
@@ -42,6 +49,10 @@ diagnostics_run() {
     /etc/oneplus/openvpn/pki/ca.key \
     /etc/oneplus/openvpn/pki/server.key \
     /etc/oneplus/openvpn/tls-crypt.key \
+    /etc/oneplus/openvpn/tls-crypt-v2-server.key \
+    /etc/oneplus/openvpn/rotation/next/pki/ca.key \
+    /etc/oneplus/openvpn/rotation/next/pki/server.key \
+    /etc/oneplus/openvpn/rotation/next/tls-crypt-v2-server.key \
     /etc/oneplus/dropbear/dropbear_ed25519_host_key; do
     if file_mode_at_most_600 "$f"; then diag_ok "Permissão protegida: $f"; else diag_fail "Permissão excessiva: $f"; fi
   done
@@ -93,8 +104,11 @@ diagnostics_run() {
 repair_permissions() {
   require_root
   install -d -m 0755 -o root -g root /etc/oneplus /var/lib/oneplus
-  install -d -m 0700 -o root -g root /var/lib/oneplus/users /var/lib/oneplus/rollback /etc/oneplus/openvpn/pki /etc/oneplus/openvpn/clients /etc/oneplus/dropbear
+  install -d -m 0700 -o root -g root /var/lib/oneplus/users /var/lib/oneplus/rollback /var/lib/oneplus/openvpn-pki-archives /etc/oneplus/openvpn/pki /etc/oneplus/openvpn/clients /etc/oneplus/dropbear
+  install -d -m 0711 -o root -g root /var/lib/oneplus/openvpn-authz
   install -d -m 0711 -o root -g root /etc/oneplus/openvpn /etc/oneplus/openvpn/ca-db
+  [[ ! -d /etc/oneplus/openvpn/rotation ]] || install -d -m 0711 -o root -g root /etc/oneplus/openvpn/rotation
+  [[ ! -d /etc/oneplus/openvpn/rotation/next ]] || chmod 0700 /etc/oneplus/openvpn/rotation/next
   install -d -m 0750 -o root -g oneplus-dnstt /etc/oneplus/slowdns 2>/dev/null || true
   install -d -m 0750 -o root -g oneplus-tls /etc/oneplus/tls 2>/dev/null || true
   find /var/lib/oneplus/users -maxdepth 1 -type f -name '*.conf' -exec chown root:root {} + -exec chmod 0600 {} + 2>/dev/null || true
@@ -109,11 +123,13 @@ repair_permissions() {
   [[ -f /etc/oneplus/tls.env ]] && chown root:oneplus-tls /etc/oneplus/tls.env && chmod 0640 /etc/oneplus/tls.env
   [[ -f /etc/oneplus/mux.env ]] && chown root:oneplus-mux /etc/oneplus/mux.env && chmod 0640 /etc/oneplus/mux.env
   local f
-  for f in /etc/oneplus/openvpn/pki/ca.key /etc/oneplus/openvpn/pki/server.key /etc/oneplus/openvpn/tls-crypt.key /etc/oneplus/dropbear/dropbear_ed25519_host_key; do
+  for f in /etc/oneplus/openvpn/pki/ca.key /etc/oneplus/openvpn/pki/server.key /etc/oneplus/openvpn/tls-crypt.key /etc/oneplus/openvpn/tls-crypt-v2-server.key /etc/oneplus/openvpn/rotation/next/pki/ca.key /etc/oneplus/openvpn/rotation/next/pki/server.key /etc/oneplus/openvpn/rotation/next/tls-crypt-v2-server.key /etc/oneplus/dropbear/dropbear_ed25519_host_key; do
     [[ -f "$f" ]] && chown root:root "$f" 2>/dev/null || true
     [[ -f "$f" ]] && chmod 0600 "$f" || true
   done
   [[ -f /etc/oneplus/openvpn/ca-db/crl.pem ]] && chown root:root /etc/oneplus/openvpn/ca-db/crl.pem && chmod 0644 /etc/oneplus/openvpn/ca-db/crl.pem || true
+  [[ -f /etc/oneplus/openvpn/rotation/ca-bundle.crt ]] && chown root:root /etc/oneplus/openvpn/rotation/ca-bundle.crt && chmod 0644 /etc/oneplus/openvpn/rotation/ca-bundle.crt || true
+  [[ -f /etc/oneplus/openvpn/rotation/crl-bundle.pem ]] && chown root:root /etc/oneplus/openvpn/rotation/crl-bundle.pem && chmod 0644 /etc/oneplus/openvpn/rotation/crl-bundle.pem || true
   [[ -f /etc/oneplus/tls/server.key ]] && chown root:oneplus-tls /etc/oneplus/tls/server.key && chmod 0640 /etc/oneplus/tls/server.key || true
   [[ -f /etc/oneplus/slowdns/server.key ]] && chown root:oneplus-dnstt /etc/oneplus/slowdns/server.key && chmod 0640 /etc/oneplus/slowdns/server.key || true
   ln -sfn /opt/oneplus/bin/oneplus /usr/local/bin/oneplus

@@ -63,8 +63,12 @@ health_check() {
   check_item "Unidade OpenVPN OnePlus" systemctl cat oneplus-openvpn.service
   check_item "Timer PKI OpenVPN" systemctl is-enabled oneplus-openvpn-pki-maintenance.timer
   check_item "Modo de autenticação OpenVPN válido" bash -c 'm=$(awk -F= '"'"'$1=="OPENVPN_AUTH_MODE"{print $2;exit}'"'"' /etc/oneplus/openvpn.env 2>/dev/null); [[ -z "$m" || "$m" == password || "$m" == hybrid ]]'
-  if grep -Fqx 'OPENVPN_AUTH_MODE=hybrid' /etc/oneplus/openvpn.env 2>/dev/null; then
-    check_item "CRL mTLS OpenVPN válida" openssl crl -in /etc/oneplus/openvpn/ca-db/crl.pem -noout -verify -CAfile /etc/oneplus/openvpn/pki/ca.crt
+  check_item "Modo tls-crypt OpenVPN válido" bash -c 'm=$(awk -F= '"'"'$1=="OPENVPN_TLS_CRYPT_MODE"{print $2;exit}'"'"' /etc/oneplus/openvpn.env 2>/dev/null); [[ -z "$m" || "$m" == legacy || "$m" == dual || "$m" == v2 ]]'
+  if [[ -s /etc/oneplus/openvpn/pki/server.crt ]]; then
+    check_item "Saúde PKI OpenVPN" /opt/oneplus/modules/openvpn.sh health
+  fi
+  if [[ -r /etc/oneplus/openvpn/rotation/state.conf ]]; then
+    check_item "Rotação PKI OpenVPN preparada" bash -c "grep -Fqx 'STATE=prepared' /etc/oneplus/openvpn/rotation/state.conf && test -s /etc/oneplus/openvpn/rotation/ca-bundle.crt && test -s /etc/oneplus/openvpn/rotation/crl-bundle.pem"
   fi
   check_item "Unidade Multiplexador OnePlus" systemctl cat oneplus-mux.service
   check_item "Unidade BadVPN instalada" systemctl cat oneplus-badvpn.service
@@ -193,6 +197,7 @@ Princípios:
 - TLS via stunnel com TLS 1.2+ e chave privada protegida;
 - OpenVPN com PAM restrito às contas oneplus-users e mTLS opcional por dispositivo;
 - revogação por CRL e rotação de certificado de dispositivo com janela de migração;
+- rotação manual da infraestrutura OpenVPN com fase dual, tls-crypt-v2 e rollback;
 - multiplexação TCP via sslh sem modo transparente;
 - firewall/NAT opcional em tabelas nftables próprias, sem limpar regras existentes;
 - backup criptografado com age, sem exportar /etc/shadow inteiro;

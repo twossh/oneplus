@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.6.1 — 2026-08-10
+- Adicionada rotação coordenada e assistida da infraestrutura OpenVPN no modo mTLS híbrido.
+- Corrigido o modelo mTLS para vincular criptograficamente a autenticação ao usuário esperado: além do PAM, um hook `auth-user-pass-verify ... via-file` compara o serial do certificado com um mapa root-owned `serial -> usuário`; o helper lê somente a primeira linha do arquivo de credenciais e não processa a senha.
+- O instalador reconstrói esse mapa a partir dos metadados de certificados existentes, preservando compatibilidade com perfis mTLS emitidos na v0.6.0.
+- A preparação gera uma próxima CA RSA 3072, novo certificado de servidor, banco/CRL independentes e chave de servidor `tls-crypt-v2`.
+- Durante a janela de migração, o runtime usa bundle de CA/CRL atual+próxima e aceita `tls-crypt` legado e `tls-crypt-v2` simultaneamente.
+- Perfis da próxima geração recebem certificado assinado pela nova CA e chave `tls-crypt-v2` individual, sem persistir a chave privada do dispositivo no servidor.
+- Adicionado painel de progresso que compara os dispositivos mTLS ativos com os perfis da próxima geração emitidos.
+- Adicionada revogação de perfis da próxima geração antes do cutover, com atualização da próxima CRL, bundle e mapa de identidade.
+- A promoção da nova CA é exclusivamente manual; o timer de PKI não pode finalizar a rotação automaticamente.
+- Finalização com perfis pendentes exige confirmação reforçada `FINALIZAR-FORCAR`; sem pendências exige `FINALIZAR`.
+- Antes da promoção é criado snapshot root-only da geração anterior, com rollback automático se a PKI promovida ou o serviço OpenVPN falhar.
+- Adicionada rotação isolada do certificado do servidor mantendo a mesma CA, também com rollback.
+- Após a promoção completa, o runtime passa para `tls-crypt-v2`; o `tls-crypt` compartilhado deixa de ser usado.
+- Diagnóstico e `oneplus --check` ampliados para validar estado `legacy`, `dual` e `v2`, bundles de migração e permissões de chaves.
+- Adicionado `docs/OPENVPN-PKI-ROTATION.md` com procedimento, limitações e checklist de migração.
+- Testes OpenVPN ampliados para duas CAs, duas CRLs, perfil `tls-crypt-v2` e controle de dispositivos pendentes.
+- Release preparada para ser a primeira publicação oficial assinada; nenhuma chave privada de release é incluída no código ou no ZIP.
+
 ## 0.6.0 — 2026-08-10
 - Adicionado modo OpenVPN híbrido opcional: conta OnePlus via PAM + certificado mTLS individual por dispositivo.
 - O modo padrão continua `password`, preservando compatibilidade com perfis existentes.

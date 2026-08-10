@@ -47,7 +47,7 @@
 - [x] backup controlado da PKI/chaves via arquivo age
 - [x] mTLS híbrido opcional por dispositivo com CRL e revogação individual
 - [x] rotação assistida de certificado de dispositivo com janela de migração
-- [ ] rotação coordenada da CA raiz, certificado do servidor e tls-crypt
+- [x] rotação coordenada da CA raiz, certificado do servidor e migração `tls-crypt` -> `tls-crypt-v2` com fase dual e rollback
 
 ## Validação real pendente
 - [ ] instalação limpa em Ubuntu 24.04 LTS
@@ -62,12 +62,14 @@
 - [ ] convivência com UFW/firewall do provedor
 - [ ] criar backup age em uma VPS e restaurar em VPS limpa
 - [ ] configurar chave minisign offline e validar upgrade por GitHub Release assinada
-- [ ] publicar a primeira release assinada e validar v0.5.1 -> v0.5.2
-- [ ] validar `oneplus update --check` contra a release v0.5.2 publicada
+- [ ] publicar a primeira release assinada (candidata v0.6.1) e validar upgrade por GitHub Release
+- [ ] validar `oneplus update --check` contra a primeira release assinada publicada
 - [ ] validar `oneplus update --latest` com rollback em uma VPS de teste
+- [ ] validar rotação completa OpenVPN atual -> próxima CA com clientes Android/Windows durante a fase dual
+- [ ] validar rollback automático da promoção da PKI em VPS descartável
 
 ## Próximas fases
-- [ ] rotação coordenada de CA/servidor/tls-crypt sem perda de conectividade
+- [ ] validar em VPS real a fase dual de CA + `tls-crypt`/`tls-crypt-v2` e o cutover sem perda inesperada de clientes migrados
 - [ ] snapshots históricos de tráfego sem banco pesado
 - [ ] política opcional de hardening do host com modo audit-only por padrão
 - [ ] testes de integração reais automatizados em VM Ubuntu 24.04
