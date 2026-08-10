@@ -1,0 +1,29 @@
+# Pacotes e artefatos
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.sha256
+dist/
+
+# Logs e temporários
+*.log
+*.tmp
+*.bak
+*.swp
+*~
+
+# Segredos / chaves privadas
+*.key
+*.pem
+*.p12
+*.pfx
+.env
+.env.*
+!.env.example
+
+# IDE / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

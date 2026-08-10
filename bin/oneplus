@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+ROOT_DIR="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
+# shellcheck source=../lib/common.sh
+source "$ROOT_DIR/lib/common.sh"
+# shellcheck source=../lib/os.sh
+source "$ROOT_DIR/lib/os.sh"
+source "$ROOT_DIR/modules/system.sh"
+source "$ROOT_DIR/modules/ssh.sh"
+source "$ROOT_DIR/modules/badvpn.sh"
+source "$ROOT_DIR/modules/slowdns.sh"
+
+require_root
+check_supported_os
+
+VERSION=$(cat "$ROOT_DIR/VERSION" 2>/dev/null || echo dev)
+
+health_check() {
+  local failed=0
+  printf "%bOnePlus %s • verificação%b\n\n" "$C_BOLD$C_CYAN" "$VERSION" "$C_RESET"
+
+  check_item() {
+    local label="$1"
+    shift
+    if "$@" >/dev/null 2>&1; then
+      printf "%b[OK]%b %s\n" "$C_GREEN" "$C_RESET" "$label"
+    else
+      printf "%b[FALHA]%b %s\n" "$C_RED" "$C_RESET" "$label"
+      failed=1
+    fi
+  }
+
+  check_item "Ubuntu 24.04+" check_supported_os
+  check_item "OpenSSH: configuração válida" sshd -t
+  check_item "Launcher instalado" test -L /usr/local/bin/oneplus
+  check_item "Árvore /opt/oneplus" test -r /opt/oneplus/VERSION
+  check_item "BadVPN UDPGW instalado" test -x /usr/local/lib/oneplus/bin/badvpn-udpgw
+  check_item "dnstt-server instalado" test -x /usr/local/lib/oneplus/bin/dnstt-server
+  check_item "Unidade BadVPN instalada" systemctl cat oneplus-badvpn.service
+  check_item "Unidade SlowDNS instalada" systemctl cat oneplus-slowdns.service
+
+  printf "\nOpenSSH: %b\n" "$(service_state ssh.service)"
+  printf "BadVPN:  %b\n" "$(service_state oneplus-badvpn.service)"
+  printf "SlowDNS: %b\n" "$(service_state oneplus-slowdns.service)"
+
+  if (( failed )); then
+    printf "\n%bVerificação concluída com falhas.%b\n" "$C_RED" "$C_RESET"
+    return 1
+  fi
+  printf "\n%bVerificação concluída: OK.%b\n" "$C_GREEN" "$C_RESET"
+}
+
+show_help() {
+  cat <<EOF2
+OnePlus ${VERSION}
+Uso:
+  oneplus             Abre o menu interativo
+  oneplus --check     Verifica a instalação
+  oneplus --version   Mostra a versão
+  oneplus --help      Mostra esta ajuda
+EOF2
+}
+
+main_menu() {
+  while true; do
+    clear
+    local ipaddr users_online
+    ipaddr=$(primary_ipv4)
+    users_online=$(who 2>/dev/null | wc -l | tr -d ' ')
+    printf "%b╔════════════════════════════════════════════════════╗%b\n" "$C_CYAN" "$C_RESET"
+    printf "%b║%b  %bONEPLUS%b  • SSH System Manager • v%-12s %b║%b\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$VERSION" "$C_CYAN" "$C_RESET"
+    printf "%b╚════════════════════════════════════════════════════╝%b\n\n" "$C_CYAN" "$C_RESET"
+    printf "Servidor: %s  |  Sessões: %s\n" "${ipaddr:-N/D}" "$users_online"
+    printf "OpenSSH: %-16b BadVPN: %-16b SlowDNS: %b\n\n" \
+      "$(service_state ssh.service)" "$(service_state oneplus-badvpn.service)" "$(service_state oneplus-slowdns.service)"
+    printf "1) Sistema e diagnóstico\n"
+    printf "2) OpenSSH\n"
+    printf "3) BadVPN UDPGW\n"
+    printf "4) SlowDNS / DNSTT\n"
+    printf "5) Sobre esta versão\n"
+    printf "0) Sair\n\nEscolha: "
+    read -r opt
+    case "$opt" in
+      1) module_system ;;
+      2) module_ssh ;;
+      3) module_badvpn ;;
+      4) module_slowdns ;;
+      5)
+        clear
+        cat <<EOF2
+OnePlus ${VERSION}
+Base nova para gerenciamento de servidores via SSH.
+Compatibilidade inicial: Ubuntu 24.04+.
+
+Princípios:
+- não substituir sshd_config integralmente;
+- validar OpenSSH antes de reiniciar;
+- serviços persistentes gerenciados por systemd;
+- sem armazenamento de senhas em texto puro;
+- sem limpeza de crontab, /bin, firewall ou configurações externas;
+- módulos de rede explicitamente habilitados pelo administrador.
+EOF2
+        pause
+        ;;
+      0) clear; exit 0 ;;
+      *) warn "Opção inválida"; sleep 1 ;;
+    esac
+  done
+}
+
+case "${1:-}" in
+  "") main_menu ;;
+  --check) health_check ;;
+  --version|-V) printf 'OnePlus %s\n' "$VERSION" ;;
+  --help|-h) show_help ;;
+  *) error "Argumento desconhecido: $1"; show_help; exit 2 ;;
+esac

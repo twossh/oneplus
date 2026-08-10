@@ -1,0 +1,22 @@
+name: Validate OnePlus
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Restore executable permissions for validation
+        run: |
+          chmod +x setup.sh install.sh uninstall.sh bin/oneplus lib/*.sh modules/*.sh libexec/* scripts/*.sh
+
+      - name: Static validation
+        run: bash scripts/validate.sh

@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+CONF=/etc/oneplus/badvpn.env
+[[ -r "$CONF" ]] || { echo "Configuração ausente: $CONF" >&2; exit 1; }
+
+BADVPN_BIND="127.0.0.1:7300"
+BADVPN_LOGLEVEL="warning"
+BADVPN_MAX_CLIENTS="500"
+BADVPN_MAX_CONNECTIONS="64"
+BADVPN_SNDBUF="1048576"
+
+# Lê somente chaves conhecidas. O arquivo não é executado como código shell.
+while IFS='=' read -r key value; do
+  [[ -z "$key" || "$key" == \#* ]] && continue
+  case "$key" in
+    BADVPN_BIND) BADVPN_BIND=$value ;;
+    BADVPN_LOGLEVEL) BADVPN_LOGLEVEL=$value ;;
+    BADVPN_MAX_CLIENTS) BADVPN_MAX_CLIENTS=$value ;;
+    BADVPN_MAX_CONNECTIONS) BADVPN_MAX_CONNECTIONS=$value ;;
+    BADVPN_SNDBUF) BADVPN_SNDBUF=$value ;;
+  esac
+done < "$CONF"
+
+exec /usr/local/lib/oneplus/bin/badvpn-udpgw \
+  --loglevel "$BADVPN_LOGLEVEL" \
+  --listen-addr "$BADVPN_BIND" \
+  --max-clients "$BADVPN_MAX_CLIENTS" \
+  --max-connections-for-client "$BADVPN_MAX_CONNECTIONS" \
+  --client-socket-sndbuf "$BADVPN_SNDBUF"

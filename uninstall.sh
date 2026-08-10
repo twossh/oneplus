@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SELF_DIR/lib/common.sh"
+require_root
+
+warn "Esta remoção desativa apenas componentes OnePlus. Não remove OpenSSH nem pacotes do Ubuntu."
+printf "Digite REMOVER para continuar: "
+read -r confirm
+[[ "$confirm" == "REMOVER" ]] || { info "Cancelado."; exit 0; }
+
+systemctl disable --now oneplus-badvpn.service oneplus-slowdns.service 2>/dev/null || true
+rm -f /etc/systemd/system/oneplus-badvpn.service /etc/systemd/system/oneplus-slowdns.service
+rm -f /usr/local/bin/oneplus
+rm -rf /opt/oneplus /usr/local/lib/oneplus
+if [[ -e /etc/ssh/sshd_config.d/60-oneplus.conf ]]; then
+  ssh_backup=$(mktemp)
+  cp -a /etc/ssh/sshd_config.d/60-oneplus.conf "$ssh_backup"
+  rm -f /etc/ssh/sshd_config.d/60-oneplus.conf
+  if sshd -t; then
+    systemctl daemon-reload
+    systemctl restart ssh.service
+    rm -f "$ssh_backup"
+  else
+    install -m 0644 "$ssh_backup" /etc/ssh/sshd_config.d/60-oneplus.conf
+    rm -f "$ssh_backup"
+    error "A remoção do snippet deixaria o OpenSSH inválido; configuração OnePlus restaurada."
+  fi
+fi
+systemctl daemon-reload
+ok "Executáveis e serviços OnePlus removidos. /etc/oneplus foi preservado para segurança/backup."

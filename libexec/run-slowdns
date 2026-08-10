@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+CONF=/etc/oneplus/slowdns.env
+[[ -r "$CONF" ]] || { echo "Configuração ausente: $CONF" >&2; exit 1; }
+
+SLOWDNS_DOMAIN=""
+SLOWDNS_BIND=""
+SLOWDNS_PORT="53"
+SLOWDNS_PUBLIC_IP=""
+SLOWDNS_UPSTREAM="127.0.0.1:22"
+SLOWDNS_MTU="1232"
+SLOWDNS_PRIVKEY="/etc/oneplus/slowdns/server.key"
+
+# Lê somente chaves conhecidas. O arquivo não é executado como código shell.
+while IFS='=' read -r key value; do
+  [[ -z "$key" || "$key" == \#* ]] && continue
+  case "$key" in
+    SLOWDNS_DOMAIN) SLOWDNS_DOMAIN=$value ;;
+    SLOWDNS_BIND) SLOWDNS_BIND=$value ;;
+    SLOWDNS_PORT) SLOWDNS_PORT=$value ;;
+    SLOWDNS_PUBLIC_IP) SLOWDNS_PUBLIC_IP=$value ;;
+    SLOWDNS_UPSTREAM) SLOWDNS_UPSTREAM=$value ;;
+    SLOWDNS_MTU) SLOWDNS_MTU=$value ;;
+    SLOWDNS_PRIVKEY) SLOWDNS_PRIVKEY=$value ;;
+  esac
+done < "$CONF"
+
+: "${SLOWDNS_DOMAIN:?Configure SLOWDNS_DOMAIN em /etc/oneplus/slowdns.env}"
+: "${SLOWDNS_BIND:?Configure SLOWDNS_BIND em /etc/oneplus/slowdns.env}"
+[[ -r "$SLOWDNS_PRIVKEY" ]] || { echo "Chave privada SlowDNS ausente." >&2; exit 1; }
+
+exec /usr/local/lib/oneplus/bin/dnstt-server \
+  -udp "${SLOWDNS_BIND}:${SLOWDNS_PORT}" \
+  -mtu "$SLOWDNS_MTU" \
+  -privkey-file "$SLOWDNS_PRIVKEY" \
+  "$SLOWDNS_DOMAIN" "$SLOWDNS_UPSTREAM"
