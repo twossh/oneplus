@@ -61,6 +61,11 @@ health_check() {
   check_item "Unidade WebSocket OnePlus" systemctl cat oneplus-websocket.service
   check_item "Unidade TLS OnePlus" systemctl cat oneplus-tls.service
   check_item "Unidade OpenVPN OnePlus" systemctl cat oneplus-openvpn.service
+  check_item "Timer PKI OpenVPN" systemctl is-enabled oneplus-openvpn-pki-maintenance.timer
+  check_item "Modo de autenticação OpenVPN válido" bash -c 'm=$(awk -F= '"'"'$1=="OPENVPN_AUTH_MODE"{print $2;exit}'"'"' /etc/oneplus/openvpn.env 2>/dev/null); [[ -z "$m" || "$m" == password || "$m" == hybrid ]]'
+  if grep -Fqx 'OPENVPN_AUTH_MODE=hybrid' /etc/oneplus/openvpn.env 2>/dev/null; then
+    check_item "CRL mTLS OpenVPN válida" openssl crl -in /etc/oneplus/openvpn/ca-db/crl.pem -noout -verify -CAfile /etc/oneplus/openvpn/pki/ca.crt
+  fi
   check_item "Unidade Multiplexador OnePlus" systemctl cat oneplus-mux.service
   check_item "Unidade BadVPN instalada" systemctl cat oneplus-badvpn.service
   check_item "Unidade SlowDNS instalada" systemctl cat oneplus-slowdns.service
@@ -85,6 +90,7 @@ health_check() {
   printf "SlowDNS:   %b\n" "$(service_state oneplus-slowdns.service)"
   printf "Usuários:  %b\n" "$(service_state oneplus-user-maintenance.timer)"
   printf "Firewall:  %b\n" "$(service_state oneplus-firewall.service)"
+  printf "PKI timer: %b\n" "$(service_state oneplus-openvpn-pki-maintenance.timer)"
 
   if (( failed )); then
     printf "\n%bVerificação concluída com falhas.%b\n" "$C_RED" "$C_RESET"
@@ -185,7 +191,8 @@ Princípios:
 - Dropbear com root sempre bloqueado pelo OnePlus;
 - WebSocket com destino fixo, sem open proxy/X-Real-Host dinâmico;
 - TLS via stunnel com TLS 1.2+ e chave privada protegida;
-- OpenVPN com autenticação PAM restrita às contas oneplus-users;
+- OpenVPN com PAM restrito às contas oneplus-users e mTLS opcional por dispositivo;
+- revogação por CRL e rotação de certificado de dispositivo com janela de migração;
 - multiplexação TCP via sslh sem modo transparente;
 - firewall/NAT opcional em tabelas nftables próprias, sem limpar regras existentes;
 - backup criptografado com age, sem exportar /etc/shadow inteiro;

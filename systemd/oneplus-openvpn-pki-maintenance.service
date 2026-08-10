@@ -1,0 +1,19 @@
+[Unit]
+Description=OnePlus OpenVPN PKI maintenance
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/oneplus/libexec/run-openvpn-pki-maintenance
+UMask=0077
+Nice=10
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX
+ReadWritePaths=/etc/oneplus/openvpn/ca-db /etc/oneplus/openvpn/clients

@@ -26,7 +26,7 @@ jobs:
         run: sudo bash scripts/test-users.sh
 
       - name: OpenVPN module tests
-        run: bash scripts/test-openvpn.sh
+        run: sudo bash scripts/test-openvpn.sh
 
       - name: Multiplexer module tests
         run: bash scripts/test-mux.sh

@@ -45,7 +45,9 @@
 - [x] relatórios de tráfego/sessões
 - [x] diagnóstico e reparo
 - [x] backup controlado da PKI/chaves via arquivo age
-- [ ] rotação assistida de PKI/chaves com janela de migração
+- [x] mTLS híbrido opcional por dispositivo com CRL e revogação individual
+- [x] rotação assistida de certificado de dispositivo com janela de migração
+- [ ] rotação coordenada da CA raiz, certificado do servidor e tls-crypt
 
 ## Validação real pendente
 - [ ] instalação limpa em Ubuntu 24.04 LTS
@@ -65,8 +67,7 @@
 - [ ] validar `oneplus update --latest` com rollback em uma VPS de teste
 
 ## Próximas fases
-- [ ] OpenVPN mTLS opcional por dispositivo
-- [ ] rotação assistida de certificados/chaves
+- [ ] rotação coordenada de CA/servidor/tls-crypt sem perda de conectividade
 - [ ] snapshots históricos de tráfego sem banco pesado
 - [ ] política opcional de hardening do host com modo audit-only por padrão
 - [ ] testes de integração reais automatizados em VM Ubuntu 24.04

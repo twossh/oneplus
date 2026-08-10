@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.0 — 2026-08-10
+- Adicionado modo OpenVPN híbrido opcional: conta OnePlus via PAM + certificado mTLS individual por dispositivo.
+- O modo padrão continua `password`, preservando compatibilidade com perfis existentes.
+- Adicionado banco de CA OpenSSL sobre a CA já existente, sem substituir automaticamente a CA do servidor.
+- Certificados de dispositivo usam EKU `clientAuth`; o servidor exige `verify-client-cert require`, `remote-cert-tls client` e CRL no modo híbrido.
+- Adicionada emissão de perfil `.ovpn` por usuário/dispositivo; a chave privada cliente é temporária e não fica persistida no servidor.
+- Adicionadas listagem e revogação individual de dispositivos por serial X.509.
+- Adicionada rotação de certificado de dispositivo com janela de migração configurável de 1 a 168 horas.
+- Adicionados `oneplus-openvpn-pki-maintenance.service` e `.timer`; o timer revoga automaticamente o certificado antigo ao fim da janela.
+- CRL é regenerada de forma atômica e fica legível pelo daemon após redução de privilégios; novas conexões passam a respeitar revogações sem reinício global do OpenVPN.
+- Diagnóstico, instalador, desinstalador, validação estática e GitHub Actions atualizados para a nova PKI.
+- Teste OpenVPN ampliado para criar CA temporária, assinar um certificado clientAuth, revogá-lo e confirmar a rejeição via CRL.
+- A rotação automática da CA raiz, certificado de servidor e `tls-crypt` continua deliberadamente fora desta versão.
+
 ## 0.5.2 — 2026-08-10
 - Adicionada consulta da release estável mais recente pela API REST oficial do GitHub, sem atualização automática silenciosa.
 - Adicionado `libexec/github_release.py` para validar JSON de release antes de qualquer URL de asset ser usada.

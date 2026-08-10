@@ -1,4 +1,4 @@
-# OnePlus v0.5.2
+# OnePlus v0.6.0
 
 Gerenciador CLI de usuários, SSH, VPN e serviços de conectividade para Ubuntu 24.04 ou superior, administrado exclusivamente pelo terminal.
 
@@ -17,7 +17,7 @@ apt-get update && apt-get install -y curl ca-certificates && bash <(curl -fsSL h
 Para uma tag/branch específica:
 
 ```bash
-ONEPLUS_REF=v0.5.1 bash <(curl -fsSL https://raw.githubusercontent.com/twossh/oneplus/main/setup.sh)
+ONEPLUS_REF=v0.6.0 bash <(curl -fsSL https://raw.githubusercontent.com/twossh/oneplus/main/setup.sh)
 ```
 
 Depois:
@@ -45,6 +45,25 @@ oneplus diagnostics
 oneplus update
 oneplus --check
 ```
+
+
+## OpenVPN mTLS opcional por dispositivo
+
+A v0.6.0 mantém o modo padrão compatível de **usuário/senha via PAM**, mas adiciona um segundo modo opcional: **usuário/senha + certificado mTLS individual por dispositivo**. O certificado não substitui a conta OnePlus; ele funciona como um segundo fator criptográfico.
+
+No modo híbrido, cada Android, iPhone, notebook ou outro dispositivo recebe um certificado próprio. O servidor exige `verify-client-cert require`, EKU de cliente e consulta uma CRL local antes de concluir a autenticação PAM.
+
+Pelo menu `oneplus openvpn` é possível:
+
+- emitir um perfil `.ovpn` individual para um usuário/dispositivo;
+- listar certificados e seus seriais;
+- revogar somente um dispositivo sem trocar a senha do usuário;
+- rotacionar um certificado criando primeiro o novo perfil e mantendo o anterior válido por uma janela de 1 a 168 horas;
+- gerar e verificar a CRL.
+
+A chave privada do dispositivo é criada em diretório temporário, embutida apenas no perfil `0600` exportado e apagada do servidor em seguida. O servidor conserva somente o certificado público e metadados necessários para revogação.
+
+A manutenção da janela de migração roda por `oneplus-openvpn-pki-maintenance.timer` a cada cinco minutos. Ao fim da janela, o certificado antigo é revogado e a CRL é regenerada. A CA raiz, a chave `tls-crypt` e o certificado do servidor **não são rotacionados automaticamente nesta versão**.
 
 ## Fase 4 — Operação e segurança
 
@@ -186,7 +205,7 @@ O OnePlus mantém:
 - Dropbear oficial Ubuntu com root bloqueado;
 - WebSocket Python 3 com upstream fixo;
 - TLS/Stunnel TLS 1.2+;
-- OpenVPN oficial Ubuntu com PAM restrito a `oneplus-users`;
+- OpenVPN oficial Ubuntu com PAM restrito a `oneplus-users` e mTLS híbrido opcional por dispositivo;
 - multiplexação TCP via `sslh` com backends loopback;
 - BadVPN UDPGW compilado de commit fixado;
 - SlowDNS/dnstt `v1.20260501.0`;
@@ -214,6 +233,8 @@ oneplus-dropbear.service
 oneplus-websocket.service
 oneplus-tls.service
 oneplus-openvpn.service
+oneplus-openvpn-pki-maintenance.service
+oneplus-openvpn-pki-maintenance.timer
 oneplus-mux.service
 oneplus-firewall.service
 oneplus-badvpn.service
@@ -222,14 +243,14 @@ oneplus-user-maintenance.service
 oneplus-user-maintenance.timer
 ```
 
-Somente o timer de manutenção de usuários é habilitado automaticamente. Protocolos e NAT permanecem sob decisão explícita do administrador.
+Os timers de manutenção de usuários e de PKI OpenVPN são habilitados automaticamente; o timer de PKI não altera nada enquanto não houver certificados com rotação agendada. Protocolos e NAT permanecem sob decisão explícita do administrador.
 
 ## Validação antes do GitHub
 
 ```bash
 bash scripts/validate.sh
 sudo bash scripts/test-users.sh
-bash scripts/test-openvpn.sh
+sudo bash scripts/test-openvpn.sh
 bash scripts/test-mux.sh
 bash scripts/test-operations.sh
 python3 scripts/test-websocket.py

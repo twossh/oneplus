@@ -1,0 +1,12 @@
+[Unit]
+Description=OnePlus OpenVPN PKI maintenance timer
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Persistent=true
+Unit=oneplus-openvpn-pki-maintenance.service
+
+[Install]
+WantedBy=timers.target

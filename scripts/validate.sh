@@ -11,9 +11,9 @@ required=(
   VERSION README.md CHANGELOG.md docs/RELEASES.md release/README.md setup.sh install.sh uninstall.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-operations.sh scripts/test-release.py scripts/test-update-metadata.py scripts/fix-permissions.sh scripts/git-fix-modes.sh scripts/release-keygen.sh scripts/release-prepare.sh scripts/release-sign.sh
   bin/oneplus lib/common.sh lib/os.sh
   modules/system.sh modules/ssh.sh modules/dropbear.sh modules/websocket.sh modules/tls.sh modules/openvpn.sh modules/mux.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh modules/firewall.sh modules/backup.sh modules/reports.sh modules/diagnostics.sh modules/update.sh
-  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-mux libexec/run-firewall libexec/websocket_proxy.py libexec/openvpn_manager.py libexec/release_verify.py libexec/github_release.py
+  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-openvpn-pki-maintenance libexec/run-mux libexec/run-firewall libexec/websocket_proxy.py libexec/openvpn_manager.py libexec/release_verify.py libexec/github_release.py
   defaults/oneplus.conf defaults/badvpn.env defaults/slowdns.env defaults/users.conf defaults/dropbear.env defaults/websocket.env defaults/tls.env defaults/openvpn.env defaults/mux.env defaults/firewall.env
-  systemd/oneplus-badvpn.service systemd/oneplus-slowdns.service systemd/oneplus-dropbear.service systemd/oneplus-websocket.service systemd/oneplus-tls.service systemd/oneplus-openvpn.service systemd/oneplus-mux.service systemd/oneplus-firewall.service
+  systemd/oneplus-badvpn.service systemd/oneplus-slowdns.service systemd/oneplus-dropbear.service systemd/oneplus-websocket.service systemd/oneplus-tls.service systemd/oneplus-openvpn.service systemd/oneplus-openvpn-pki-maintenance.service systemd/oneplus-openvpn-pki-maintenance.timer systemd/oneplus-mux.service systemd/oneplus-firewall.service
   systemd/oneplus-user-maintenance.service systemd/oneplus-user-maintenance.timer
   scripts/test-websocket.py
 )
@@ -30,7 +30,7 @@ mapfile -t shell_files < <(
   {
     find "$ROOT_DIR" -type f -name '*.sh' -not -path '*/.git/*' -print
     printf '%s\n' "$ROOT_DIR/bin/oneplus" "$ROOT_DIR/libexec/run-badvpn" "$ROOT_DIR/libexec/run-slowdns" "$ROOT_DIR/libexec/run-user-maintenance" \
-      "$ROOT_DIR/libexec/run-dropbear" "$ROOT_DIR/libexec/run-websocket" "$ROOT_DIR/libexec/run-tls" "$ROOT_DIR/libexec/run-openvpn" "$ROOT_DIR/libexec/run-mux" "$ROOT_DIR/libexec/run-firewall"
+      "$ROOT_DIR/libexec/run-dropbear" "$ROOT_DIR/libexec/run-websocket" "$ROOT_DIR/libexec/run-tls" "$ROOT_DIR/libexec/run-openvpn" "$ROOT_DIR/libexec/run-openvpn-pki-maintenance" "$ROOT_DIR/libexec/run-mux" "$ROOT_DIR/libexec/run-firewall"
   } | sort -u
 )
 
@@ -47,7 +47,7 @@ done
 
 executables=(setup.sh install.sh uninstall.sh bin/oneplus lib/common.sh lib/os.sh \
   modules/system.sh modules/ssh.sh modules/dropbear.sh modules/websocket.sh modules/tls.sh modules/openvpn.sh modules/mux.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh modules/firewall.sh modules/backup.sh modules/reports.sh modules/diagnostics.sh modules/update.sh \
-  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-mux libexec/run-firewall libexec/websocket_proxy.py libexec/openvpn_manager.py libexec/release_verify.py libexec/github_release.py \
+  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-openvpn-pki-maintenance libexec/run-mux libexec/run-firewall libexec/websocket_proxy.py libexec/openvpn_manager.py libexec/release_verify.py libexec/github_release.py \
   scripts/validate.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-operations.sh scripts/test-release.py scripts/test-update-metadata.py scripts/fix-permissions.sh scripts/git-fix-modes.sh scripts/release-keygen.sh scripts/release-prepare.sh scripts/release-sign.sh scripts/test-websocket.py scripts/test-update-metadata.py)
 for rel in "${executables[@]}"; do
   [[ -x "$ROOT_DIR/$rel" ]] || fail "Permissão executável ausente: $rel"
@@ -154,11 +154,19 @@ else
 fi
 
 
-# OpenVPN: autenticação moderna por PAM, sem certificado cliente obrigatório e sem NAT automático.
-if ! grep -Fq 'verify-client-cert none' "$ROOT_DIR/libexec/run-openvpn" ||    ! grep -Fq 'username-as-common-name' "$ROOT_DIR/libexec/run-openvpn" ||    ! grep -Fq 'plugin ${plugin} oneplus-openvpn' "$ROOT_DIR/libexec/run-openvpn"; then
-  fail "OpenVPN não contém a política de autenticação PAM esperada."
+# OpenVPN: PAM obrigatório e mTLS híbrido opcional por dispositivo.
+if ! grep -Fq 'verify-client-cert none' "$ROOT_DIR/libexec/run-openvpn" || \
+   ! grep -Fq 'verify-client-cert require' "$ROOT_DIR/libexec/run-openvpn" || \
+   ! grep -Fq 'remote-cert-tls client' "$ROOT_DIR/libexec/run-openvpn" || \
+   ! grep -Fq 'crl-verify ${CRL}' "$ROOT_DIR/libexec/run-openvpn" || \
+   ! grep -Fq 'username-as-common-name' "$ROOT_DIR/libexec/run-openvpn" || \
+   ! grep -Fq 'plugin ${plugin} oneplus-openvpn' "$ROOT_DIR/libexec/run-openvpn"; then
+  fail "OpenVPN não contém os modos password + mTLS híbrido esperados."
 else
-  ok "OpenVPN usa autenticação PAM/username moderna."
+  ok "OpenVPN mantém PAM e adiciona mTLS híbrido por dispositivo."
+fi
+if ! grep -Eq '^OPENVPN_AUTH_MODE=password$' "$ROOT_DIR/defaults/openvpn.env"; then
+  fail "OPENVPN_AUTH_MODE padrão deve permanecer password para compatibilidade."
 fi
 if grep -Fq 'client-cert-not-required' "$ROOT_DIR/libexec/run-openvpn" || grep -Fq 'duplicate-cn' "$ROOT_DIR/libexec/run-openvpn"; then
   fail "OpenVPN contém opção removida/incompatível ou duplicate-cn."
@@ -168,7 +176,8 @@ if grep -RIn --exclude='validate.sh' -E 'MASQUERADE|nft[[:space:]].*masquerade|i
 else
   ok "OpenVPN não manipula firewall diretamente."
 fi
-if ! grep -Fq 'if [[ "$full_tunnel" == yes ]]' "$ROOT_DIR/libexec/run-openvpn" ||    ! grep -Fq 'redirect-gateway def1 bypass-dhcp' "$ROOT_DIR/libexec/run-openvpn"; then
+if ! grep -Fq 'if [[ "$full_tunnel" == yes ]]' "$ROOT_DIR/libexec/run-openvpn" || \
+   ! grep -Fq 'redirect-gateway def1 bypass-dhcp' "$ROOT_DIR/libexec/run-openvpn"; then
   fail "Full-tunnel OpenVPN deve ser opcional e condicionado por OPENVPN_FULL_TUNNEL."
 else
   ok "Full-tunnel OpenVPN é opcional e controlado pelo administrador."
@@ -179,7 +188,8 @@ if ! grep -Fq 'user ingroup oneplus-users' "$ROOT_DIR/modules/openvpn.sh" || \
 else
   ok "PAM OpenVPN nega root e restringe acesso às contas gerenciadas pelo OnePlus."
 fi
-if ! grep -Fq 'management ${RUNTIME_DIR}/management.sock unix' "$ROOT_DIR/libexec/run-openvpn" ||    ! grep -Fq 'management-client-user root' "$ROOT_DIR/libexec/run-openvpn"; then
+if ! grep -Fq 'management ${RUNTIME_DIR}/management.sock unix' "$ROOT_DIR/libexec/run-openvpn" || \
+   ! grep -Fq 'management-client-user root' "$ROOT_DIR/libexec/run-openvpn"; then
   fail "Interface de gerenciamento OpenVPN deve ser UNIX socket restrito a root."
 else
   ok "Gerenciamento OpenVPN limitado a UNIX socket local/root."
@@ -188,6 +198,18 @@ if grep -Fq 'cat "$OPENVPN_CA_KEY"' "$ROOT_DIR/modules/openvpn.sh"; then
   fail "A chave privada da CA OpenVPN não pode ser exportada para perfis cliente."
 else
   ok "Exportação OpenVPN não inclui a chave privada da CA."
+fi
+if ! grep -Fq 'extendedKeyUsage = clientAuth' "$ROOT_DIR/modules/openvpn.sh" || \
+   ! grep -Fq 'REVOKE_AFTER=' "$ROOT_DIR/modules/openvpn.sh" || \
+   ! grep -Fq 'OnUnitActiveSec=5min' "$ROOT_DIR/systemd/oneplus-openvpn-pki-maintenance.timer"; then
+  fail "PKI de dispositivo/CRL/rotação assistida OpenVPN incompleta."
+else
+  ok "mTLS por dispositivo, CRL e janela de rotação estão presentes."
+fi
+if grep -Eq 'client\.key[^[:cntrl:]]*(install|cp)[^[:cntrl:]]*OPENVPN' "$ROOT_DIR/modules/openvpn.sh"; then
+  fail "Chaves privadas de dispositivos não podem ser persistidas no servidor."
+else
+  ok "Chave privada mTLS fica somente no perfil exportado."
 fi
 
 # sslh: multiplexação somente TCP, backends loopback e sem modo transparente/firewall.

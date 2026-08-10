@@ -48,7 +48,8 @@ fi
 install -d -m 0755 /opt/oneplus /usr/local/lib/oneplus/bin /etc/oneplus /var/lib/oneplus /var/log/oneplus
 install -d -m 0700 /var/lib/oneplus/users
 install -d -m 0700 -o root -g root /etc/oneplus/dropbear
-install -d -m 0700 -o root -g root /etc/oneplus/openvpn /etc/oneplus/openvpn/pki
+install -d -m 0711 -o root -g root /etc/oneplus/openvpn
+install -d -m 0700 -o root -g root /etc/oneplus/openvpn/pki
 rsync -a --delete \
   --exclude '.git' \
   --exclude '.github' \
@@ -109,9 +110,11 @@ ensure_env_key() {
 ensure_env_key /etc/oneplus/openvpn.env OPENVPN_FULL_TUNNEL no
 ensure_env_key /etc/oneplus/openvpn.env OPENVPN_PUSH_DNS1 ""
 ensure_env_key /etc/oneplus/openvpn.env OPENVPN_PUSH_DNS2 ""
+ensure_env_key /etc/oneplus/openvpn.env OPENVPN_AUTH_MODE password
 install -d -m 0750 -o root -g oneplus-dnstt /etc/oneplus/slowdns
 install -d -m 0750 -o root -g oneplus-tls /etc/oneplus/tls
-install -d -m 0700 -o root -g root /etc/oneplus/openvpn /etc/oneplus/openvpn/pki
+install -d -m 0711 -o root -g root /etc/oneplus/openvpn /etc/oneplus/openvpn/ca-db
+install -d -m 0700 -o root -g root /etc/oneplus/openvpn/pki /etc/oneplus/openvpn/clients
 
 install -m 0644 /opt/oneplus/systemd/oneplus-badvpn.service /etc/systemd/system/oneplus-badvpn.service
 install -m 0644 /opt/oneplus/systemd/oneplus-slowdns.service /etc/systemd/system/oneplus-slowdns.service
@@ -121,6 +124,8 @@ install -m 0644 /opt/oneplus/systemd/oneplus-dropbear.service /etc/systemd/syste
 install -m 0644 /opt/oneplus/systemd/oneplus-websocket.service /etc/systemd/system/oneplus-websocket.service
 install -m 0644 /opt/oneplus/systemd/oneplus-tls.service /etc/systemd/system/oneplus-tls.service
 install -m 0644 /opt/oneplus/systemd/oneplus-openvpn.service /etc/systemd/system/oneplus-openvpn.service
+install -m 0644 /opt/oneplus/systemd/oneplus-openvpn-pki-maintenance.service /etc/systemd/system/oneplus-openvpn-pki-maintenance.service
+install -m 0644 /opt/oneplus/systemd/oneplus-openvpn-pki-maintenance.timer /etc/systemd/system/oneplus-openvpn-pki-maintenance.timer
 install -m 0644 /opt/oneplus/systemd/oneplus-mux.service /etc/systemd/system/oneplus-mux.service
 install -m 0644 /opt/oneplus/systemd/oneplus-firewall.service /etc/systemd/system/oneplus-firewall.service
 ln -sfn /opt/oneplus/bin/oneplus /usr/local/bin/oneplus
@@ -136,12 +141,17 @@ if command -v systemd-analyze >/dev/null 2>&1; then
     /etc/systemd/system/oneplus-websocket.service \
     /etc/systemd/system/oneplus-tls.service \
     /etc/systemd/system/oneplus-openvpn.service \
+    /etc/systemd/system/oneplus-openvpn-pki-maintenance.service \
+    /etc/systemd/system/oneplus-openvpn-pki-maintenance.timer \
     /etc/systemd/system/oneplus-mux.service \
     /etc/systemd/system/oneplus-firewall.service
 fi
 systemctl daemon-reload
 /opt/oneplus/modules/users.sh init
 /opt/oneplus/modules/openvpn.sh init
+if grep -Fqx 'OPENVPN_AUTH_MODE=hybrid' /etc/oneplus/openvpn.env 2>/dev/null && [[ -s /etc/oneplus/openvpn/pki/ca.key ]]; then
+  /opt/oneplus/modules/openvpn.sh ca-db
+fi
 
 info "Instalando BadVPN UDPGW (compatibilidade SSH UDP)..."
 /opt/oneplus/modules/badvpn.sh install-binary
@@ -162,9 +172,10 @@ if [[ "$(readlink -f /usr/local/bin/oneplus)" != "/opt/oneplus/bin/oneplus" ]]; 
 fi
 
 systemctl enable --now oneplus-user-maintenance.timer
+systemctl enable --now oneplus-openvpn-pki-maintenance.timer
 
 printf "\n%bInstalação concluída.%b\n" "$C_GREEN" "$C_RESET"
 printf "Execute: %boneplus%b\n" "$C_BOLD" "$C_RESET"
 printf "Verifique: %boneplus --check%b\n" "$C_BOLD" "$C_RESET"
 printf "Dropbear, WebSocket, TLS, OpenVPN, Multiplexador, Firewall/NAT, BadVPN e SlowDNS permanecem desabilitados até serem configurados no menu.\n"
-printf "A manutenção segura de expiração/limites de usuários está ativa via systemd timer.\n"
+printf "A manutenção segura de expiração/limites de usuários e a manutenção de PKI OpenVPN estão ativas via systemd timers.\n"
