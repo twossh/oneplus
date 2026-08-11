@@ -1,0 +1,116 @@
+name: Integration Ubuntu 24.04 VM
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'bin/**'
+      - 'defaults/**'
+      - 'lib/**'
+      - 'libexec/**'
+      - 'modules/**'
+      - 'scripts/**'
+      - 'systemd/**'
+      - 'install.sh'
+      - 'setup.sh'
+      - 'VERSION'
+      - '.github/workflows/integration-ubuntu.yml'
+  pull_request:
+    paths:
+      - 'bin/**'
+      - 'defaults/**'
+      - 'lib/**'
+      - 'libexec/**'
+      - 'modules/**'
+      - 'scripts/**'
+      - 'systemd/**'
+      - 'install.sh'
+      - 'setup.sh'
+      - 'VERSION'
+      - '.github/workflows/integration-ubuntu.yml'
+  schedule:
+    - cron: '17 4 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oneplus-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ubuntu-24-04-hosted-vm:
+    name: Install / upgrade / service smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout with recent history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 30
+
+      - name: Restore executable permissions
+        run: |
+          chmod +x scripts/fix-permissions.sh
+          bash scripts/fix-permissions.sh
+
+      - name: Confirm disposable GitHub VM
+        run: |
+          . /etc/os-release
+          test "$ID" = ubuntu
+          dpkg --compare-versions "$VERSION_ID" ge 24.04
+          test "$GITHUB_ACTIONS" = true
+          echo "Runner: $ImageOS / $ImageVersion"
+          systemd-detect-virt || true
+          systemctl --version | head -1
+
+      - name: Find previous OnePlus version for upgrade test
+        id: base
+        shell: bash
+        run: |
+          current=$(tr -d '[:space:]' < VERSION)
+          base_sha=''
+          while read -r sha; do
+            v=$(git show "$sha:VERSION" 2>/dev/null | tr -d '[:space:]' || true)
+            if [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && [[ "$v" != "$current" ]]; then
+              base_sha=$sha
+              echo "Previous version candidate: $v ($sha)"
+              break
+            fi
+          done < <(git rev-list HEAD^ 2>/dev/null || true)
+          if [[ -n "$base_sha" ]]; then
+            git worktree add --detach /tmp/oneplus-base "$base_sha"
+            echo 'base_dir=/tmp/oneplus-base' >> "$GITHUB_OUTPUT"
+          else
+            echo 'No previous VERSION found in recent history; clean-install scenario only.'
+            echo 'base_dir=' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Real integration on Ubuntu 24.04 hosted VM
+        env:
+          ONEPLUS_INTEGRATION_BASE_DIR: ${{ steps.base.outputs.base_dir }}
+        run: |
+          sudo --preserve-env=GITHUB_ACTIONS,ONEPLUS_INTEGRATION_BASE_DIR \
+            bash scripts/integration-ubuntu.sh --ci
+
+      - name: Collect diagnostics on failure
+        if: failure()
+        run: |
+          sudo systemctl --failed --no-pager || true
+          sudo journalctl -b -p warning --no-pager -n 300 || true
+          sudo journalctl -u 'oneplus-*' --no-pager -n 500 || true
+          sudo ss -lntup || true
+          sudo /usr/local/bin/oneplus --check || true
+
+      - name: Publish integration report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oneplus-integration-${{ github.run_id }}
+          path: |
+            /var/log/oneplus/integration/*.log
+            /var/lib/oneplus/integration/post-reboot.result
+          if-no-files-found: ignore
+          retention-days: 7

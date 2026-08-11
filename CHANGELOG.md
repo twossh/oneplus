@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.8.0 — 2026-08-10
+
+### Integração real em Ubuntu 24.04
+- adiciona workflow separado `Integration Ubuntu 24.04 VM` em runner GitHub hospedado e descartável;
+- executa instalação real do OnePlus, incluindo dependências, BadVPN e dnstt;
+- procura uma versão anterior no histórico Git e testa upgrade quando disponível;
+- testa reinstalação idempotente e preservação de `/etc/oneplus`;
+- smoke tests reais para Dropbear, WebSocket RFC6455, TLS/Stunnel, BadVPN UDPGW, SlowDNS/dnstt e sslh;
+- OpenVPN runtime é testado quando `/dev/net/tun` está disponível no runner;
+- histórico leve é executado como serviço real e timers persistentes são verificados;
+- `oneplus --check` e `sshd -t` fazem parte da aceitação final;
+- adiciona guarda explícita `DESTROYABLE_VM` para impedir execução acidental da suíte em produção;
+- adiciona retomada pós-reboot para VPS/VM descartável, validando `boot_id`, serviços habilitados e preservação de configuração;
+- relatórios de integração ficam root-only em `/var/log/oneplus/integration`;
+- documentação nova em `docs/INTEGRATION-TESTS.md`.
+
 ## 0.7.0 — 2026-08-10
 - Adicionado histórico leve opt-in em NDJSON, sem banco de dados e com arquivos root-only.
 - Snapshots armazenam somente métricas agregadas: carga, memória, filesystem, RX/TX por interface, contagens de usuários/sessões/OpenVPN e estado dos serviços.

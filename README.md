@@ -1,4 +1,4 @@
-# OnePlus v0.7.0
+# OnePlus v0.8.0
 
 Gerenciador CLI de usuários, SSH, VPN e serviços de conectividade para Ubuntu 24.04 ou superior, administrado exclusivamente pelo terminal.
 
@@ -17,7 +17,7 @@ apt-get update && apt-get install -y curl ca-certificates && bash <(curl -fsSL h
 Para uma tag/branch específica:
 
 ```bash
-ONEPLUS_REF=v0.7.0 bash <(curl -fsSL https://raw.githubusercontent.com/twossh/oneplus/main/setup.sh)
+ONEPLUS_REF=v0.8.0 bash <(curl -fsSL https://raw.githubusercontent.com/twossh/oneplus/main/setup.sh)
 ```
 
 Depois:
@@ -296,8 +296,22 @@ bash scripts/test-mux.sh
 bash scripts/test-operations.sh
 python3 scripts/test-history.py
 bash scripts/test-hardening.sh
+bash scripts/test-integration-contract.sh
 python3 scripts/test-websocket.py
 systemd-analyze verify systemd/*.service systemd/*.timer
 ```
 
 O GitHub Actions usa Ubuntu 24.04 e repete as validações compatíveis.
+
+## Integração Ubuntu 24.04
+
+A v0.8.0 adiciona uma suíte de integração que instala o OnePlus de verdade em uma VM descartável Ubuntu 24.04, testa upgrade/reinstalação, serviços em `systemd`, listeners de loopback e contratos de segurança. No GitHub ela roda em `ubuntu-24.04`; para reboot real existe um modo de retomada específico para VPS/VM descartável.
+
+A suíte **não deve ser executada em produção**. Fora do GitHub Actions ela exige confirmação explícita:
+
+```bash
+sudo env ONEPLUS_INTEGRATION_CONFIRM=DESTROYABLE_VM \
+  bash scripts/integration-ubuntu.sh --ci
+```
+
+Veja `docs/INTEGRATION-TESTS.md`.

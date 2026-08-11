@@ -40,6 +40,9 @@ jobs:
       - name: Hardening audit-only tests
         run: bash scripts/test-hardening.sh
 
+      - name: Integration safety contract tests
+        run: bash scripts/test-integration-contract.sh
+
       - name: Signed release archive security tests
         run: python3 scripts/test-release.py
 

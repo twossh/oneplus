@@ -414,6 +414,38 @@ if ! grep -Fq 'oneplus history' "$ROOT_DIR/bin/oneplus" || ! grep -Fq 'oneplus h
   fail "CLI de histórico/hardening ausente."
 fi
 
+
+# Fase 6: integração real em VM Ubuntu 24.04, com guarda contra produção.
+if [[ ! -r "$ROOT_DIR/scripts/integration-ubuntu.sh" || ! -r "$ROOT_DIR/.github/workflows/integration-ubuntu.yml" || ! -r "$ROOT_DIR/docs/INTEGRATION-TESTS.md" ]]; then
+  fail "Suíte/documentação de integração Ubuntu 24.04 ausente."
+else
+  ok "Arquivos de integração Ubuntu 24.04 presentes."
+fi
+if ! grep -Fq 'ONEPLUS_INTEGRATION_CONFIRM' "$ROOT_DIR/scripts/integration-ubuntu.sh" || \
+   ! grep -Fq 'DESTROYABLE_VM' "$ROOT_DIR/scripts/integration-ubuntu.sh" || \
+   ! grep -Fq 'GITHUB_ACTIONS' "$ROOT_DIR/scripts/integration-ubuntu.sh"; then
+  fail "Integração real precisa exigir VM descartável fora do GitHub Actions."
+else
+  ok "Integração possui guarda explícita contra execução acidental em produção."
+fi
+if grep -Eq '^[[:space:]]*(reboot|shutdown|poweroff|systemctl[[:space:]]+reboot)([[:space:]]|$)' "$ROOT_DIR/scripts/integration-ubuntu.sh"; then
+  fail "A suíte nunca deve reiniciar o host automaticamente."
+else
+  ok "Reboot real permanece manual e exige armamento explícito."
+fi
+if ! grep -Fq 'runs-on: ubuntu-24.04' "$ROOT_DIR/.github/workflows/integration-ubuntu.yml" || \
+   ! grep -Fq 'contents: read' "$ROOT_DIR/.github/workflows/integration-ubuntu.yml"; then
+  fail "Workflow de integração deve usar ubuntu-24.04 e permissões somente leitura."
+else
+  ok "Workflow de integração fixado em VM Ubuntu 24.04 com contents: read."
+fi
+if ! grep -Fq 'ONEPLUS_INTEGRATION_BASE_DIR' "$ROOT_DIR/.github/workflows/integration-ubuntu.yml" || \
+   ! grep -Fq 'configuração /etc/oneplus preservada' "$ROOT_DIR/scripts/integration-ubuntu.sh"; then
+  fail "Teste de upgrade/preservação de configuração ausente."
+else
+  ok "Integração testa upgrade/reinstall e preservação de configuração."
+fi
+
 if [[ "$FAILED" -ne 0 ]]; then
   printf '\nValidação falhou.\n' >&2
   exit 1
