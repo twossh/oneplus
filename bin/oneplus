@@ -21,6 +21,8 @@ source "$ROOT_DIR/modules/backup.sh"
 source "$ROOT_DIR/modules/reports.sh"
 source "$ROOT_DIR/modules/diagnostics.sh"
 source "$ROOT_DIR/modules/update.sh"
+source "$ROOT_DIR/modules/history.sh"
+source "$ROOT_DIR/modules/hardening.sh"
 
 require_root
 check_supported_os
@@ -56,7 +58,7 @@ health_check() {
   check_item "Plugin PAM OpenVPN" bash -c "find /usr/lib -type f -name openvpn-plugin-auth-pam.so -print -quit | grep -q ."
   check_item "PAM OpenVPN restrito ao OnePlus/root negado" bash -c "grep -Fq 'user ingroup oneplus-users' /etc/pam.d/oneplus-openvpn && grep -Fq 'user != root' /etc/pam.d/oneplus-openvpn"
   check_item "sslh-select instalado pelo Ubuntu" test -x /usr/sbin/sslh-select
-  check_item "Componentes Python 3" python3 -m py_compile /opt/oneplus/libexec/websocket_proxy.py /opt/oneplus/libexec/openvpn_manager.py /opt/oneplus/libexec/release_verify.py /opt/oneplus/libexec/github_release.py
+  check_item "Componentes Python 3" python3 -m py_compile /opt/oneplus/libexec/websocket_proxy.py /opt/oneplus/libexec/openvpn_manager.py /opt/oneplus/libexec/release_verify.py /opt/oneplus/libexec/github_release.py /opt/oneplus/libexec/history_snapshot.py /opt/oneplus/libexec/history_summary.py
   check_item "Unidade Dropbear OnePlus" systemctl cat oneplus-dropbear.service
   check_item "Unidade WebSocket OnePlus" systemctl cat oneplus-websocket.service
   check_item "Unidade TLS OnePlus" systemctl cat oneplus-tls.service
@@ -83,6 +85,9 @@ health_check() {
   check_item "minisign instalado" bash -c 'command -v minisign >/dev/null 2>&1'
   check_item "Configuração firewall OnePlus" test -r /etc/oneplus/firewall.env
   check_item "Unidade firewall OnePlus" systemctl cat oneplus-firewall.service
+  check_item "Configuração do histórico leve" test -r /etc/oneplus/history.env
+  check_item "Unidade de histórico leve" systemctl cat oneplus-history.service
+  check_item "Timer de histórico leve" systemctl cat oneplus-history.timer
 
   printf "\nOpenSSH:   %b\n" "$(service_state ssh.service)"
   printf "Dropbear:  %b\n" "$(service_state oneplus-dropbear.service)"
@@ -95,6 +100,7 @@ health_check() {
   printf "Usuários:  %b\n" "$(service_state oneplus-user-maintenance.timer)"
   printf "Firewall:  %b\n" "$(service_state oneplus-firewall.service)"
   printf "PKI timer: %b\n" "$(service_state oneplus-openvpn-pki-maintenance.timer)"
+  printf "Histórico:  %b\n" "$(service_state oneplus-history.timer)"
 
   if (( failed )); then
     printf "\n%bVerificação concluída com falhas.%b\n" "$C_RED" "$C_RESET"
@@ -124,6 +130,8 @@ Uso:
   oneplus update --check        Verifica a release estável mais recente
   oneplus update --latest       Atualiza para a release estável mais recente
   oneplus update --tag vX.Y.Z   Atualiza para uma tag assinada específica
+  oneplus history     Histórico leve de tráfego/sessões sem banco
+  oneplus hardening   Auditoria de hardening (audit-only)
   oneplus --help      Mostra esta ajuda
 EOF2
 }
@@ -159,7 +167,9 @@ main_menu() {
     printf "13) Relatórios\n"
     printf "14) Diagnóstico e reparo\n"
     printf "15) Atualização assinada\n"
-    printf "16) Sobre esta versão\n"
+    printf "16) Histórico leve\n"
+    printf "17) Hardening audit-only\n"
+    printf "18) Sobre esta versão\n"
     printf "0) Sair\n\nEscolha: "
     read -r opt
     case "$opt" in
@@ -178,7 +188,9 @@ main_menu() {
       13) module_reports ;;
       14) module_diagnostics ;;
       15) module_update ;;
-      16)
+      16) module_history ;;
+      17) module_hardening ;;
+      18)
         clear
         cat <<EOF2
 OnePlus ${VERSION}
@@ -203,7 +215,9 @@ Princípios:
 - backup criptografado com age, sem exportar /etc/shadow inteiro;
 - atualizador estável fail-closed com minisign;
 - contas SSH gerenciadas sem armazenar senhas;
-- expiração e limites aplicados apenas a contas criadas pelo OnePlus.
+- expiração e limites aplicados apenas a contas criadas pelo OnePlus;
+- histórico leve opt-in, sem usernames/IPs remotos/payloads;
+- hardening do host em modo audit-only: nenhuma mudança automática.
 EOF2
         pause
         ;;
@@ -228,6 +242,8 @@ case "${1:-}" in
   reports|report) module_reports ;;
   diagnostics|diag) module_diagnostics ;;
   update|upgrade) shift; update_cli "$@" ;;
+  history) module_history ;;
+  hardening|audit) module_hardening ;;
   --help|-h) show_help ;;
   *) error "Argumento desconhecido: $1"; show_help; exit 2 ;;
 esac

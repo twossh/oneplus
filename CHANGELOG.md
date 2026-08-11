@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.0 — 2026-08-10
+- Adicionado histórico leve opt-in em NDJSON, sem banco de dados e com arquivos root-only.
+- Snapshots armazenam somente métricas agregadas: carga, memória, filesystem, RX/TX por interface, contagens de usuários/sessões/OpenVPN e estado dos serviços.
+- O histórico não persiste usernames, IPs remotos, comandos, senhas ou payloads.
+- Adicionados `oneplus-history.service` e `.timer`; a coleta permanece desabilitada até decisão explícita do administrador.
+- Intervalo configurável em 1/5/15/30/60 minutos e retenção de 1 a 90 dias.
+- Coletor protege o arquivo diário contra symlink/hardlink e usa `O_NOFOLLOW`, `0600` e `fsync`.
+- Adicionado resumo histórico de carga, memória, disco, sessões, clientes OpenVPN, tráfego acumulado e disponibilidade observada dos serviços.
+- Adicionado módulo `oneplus hardening` em modo estritamente audit-only.
+- Auditoria inclui OpenSSH efetivo, unattended-upgrades, AppArmor, NTP, units falhas, reboot pendente, permissões OnePlus, certificados, listeners, firewall e forwarding.
+- O hardening não instala/atualiza pacotes, não reinicia serviços, não altera sysctl/SSH/firewall.
+- Adicionados `docs/HARDENING.md`, `scripts/test-history.py` e `scripts/test-hardening.sh`.
+- GitHub Actions, instalador, desinstalador, health check e validação estática atualizados para a v0.7.0.
+
 ## 0.6.1 — 2026-08-10
 - Adicionada rotação coordenada e assistida da infraestrutura OpenVPN no modo mTLS híbrido.
 - Corrigido o modelo mTLS para vincular criptograficamente a autenticação ao usuário esperado: além do PAM, um hook `auth-user-pass-verify ... via-file` compara o serial do certificado com um mapa root-owned `serial -> usuário`; o helper lê somente a primeira linha do arquivo de credenciais e não processa a senha.

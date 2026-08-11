@@ -9,12 +9,13 @@ printf "Digite REMOVER para continuar: "
 read -r confirm
 [[ "$confirm" == "REMOVER" ]] || { info "Cancelado."; exit 0; }
 
-systemctl disable --now oneplus-badvpn.service oneplus-slowdns.service oneplus-dropbear.service oneplus-websocket.service oneplus-tls.service oneplus-openvpn.service oneplus-mux.service oneplus-firewall.service oneplus-user-maintenance.timer oneplus-openvpn-pki-maintenance.timer 2>/dev/null || true
-systemctl stop oneplus-user-maintenance.service oneplus-openvpn-pki-maintenance.service 2>/dev/null || true
+systemctl disable --now oneplus-badvpn.service oneplus-slowdns.service oneplus-dropbear.service oneplus-websocket.service oneplus-tls.service oneplus-openvpn.service oneplus-mux.service oneplus-firewall.service oneplus-user-maintenance.timer oneplus-openvpn-pki-maintenance.timer oneplus-history.timer 2>/dev/null || true
+systemctl stop oneplus-user-maintenance.service oneplus-openvpn-pki-maintenance.service oneplus-history.service 2>/dev/null || true
 rm -f /etc/systemd/system/oneplus-badvpn.service /etc/systemd/system/oneplus-slowdns.service \
   /etc/systemd/system/oneplus-dropbear.service /etc/systemd/system/oneplus-websocket.service /etc/systemd/system/oneplus-tls.service \
   /etc/systemd/system/oneplus-openvpn.service /etc/systemd/system/oneplus-openvpn-pki-maintenance.service /etc/systemd/system/oneplus-openvpn-pki-maintenance.timer /etc/systemd/system/oneplus-mux.service /etc/systemd/system/oneplus-firewall.service \
-  /etc/systemd/system/oneplus-user-maintenance.service /etc/systemd/system/oneplus-user-maintenance.timer
+  /etc/systemd/system/oneplus-user-maintenance.service /etc/systemd/system/oneplus-user-maintenance.timer \
+  /etc/systemd/system/oneplus-history.service /etc/systemd/system/oneplus-history.timer
 rm -f /etc/security/limits.d/90-oneplus.conf /etc/pam.d/oneplus-openvpn /etc/sysctl.d/90-oneplus-forwarding.conf
 rm -f /usr/local/bin/oneplus
 rm -rf /opt/oneplus /usr/local/lib/oneplus

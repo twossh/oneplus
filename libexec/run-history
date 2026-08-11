@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+CONFIG=/etc/oneplus/history.env
+HISTORY_DIR=/var/lib/oneplus/history
+SNAPSHOT=/opt/oneplus/libexec/history_snapshot.py
+
+cfg_get() {
+  local key="$1" default="$2" value
+  value=$(awk -F= -v k="$key" '$1==k {sub(/^[^=]*=/, ""); print; exit}' "$CONFIG" 2>/dev/null || true)
+  printf '%s' "${value:-$default}"
+}
+
+retention=$(cfg_get HISTORY_RETENTION_DAYS 14)
+[[ "$retention" =~ ^[0-9]+$ ]] && (( 10#$retention >= 1 && 10#$retention <= 90 )) || {
+  echo "HISTORY_RETENTION_DAYS inválido" >&2
+  exit 2
+}
+[[ -x "$SNAPSHOT" ]] || { echo "Coletor de histórico ausente" >&2; exit 1; }
+install -d -m 0700 -o root -g root "$HISTORY_DIR"
+umask 077
+exec python3 "$SNAPSHOT" --output-dir "$HISTORY_DIR" --retention-days "$retention"

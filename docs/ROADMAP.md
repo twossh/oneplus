@@ -62,14 +62,17 @@
 - [ ] convivência com UFW/firewall do provedor
 - [ ] criar backup age em uma VPS e restaurar em VPS limpa
 - [ ] configurar chave minisign offline e validar upgrade por GitHub Release assinada
-- [ ] publicar a primeira release assinada (candidata v0.6.1) e validar upgrade por GitHub Release
+- [ ] publicar a primeira release assinada (candidata v0.7.0) e validar upgrade por GitHub Release
 - [ ] validar `oneplus update --check` contra a primeira release assinada publicada
 - [ ] validar `oneplus update --latest` com rollback em uma VPS de teste
 - [ ] validar rotação completa OpenVPN atual -> próxima CA com clientes Android/Windows durante a fase dual
 - [ ] validar rollback automático da promoção da PKI em VPS descartável
+- [ ] validar histórico por 24h em VPS real e conferir deltas de tráfego após reboot
+- [ ] executar hardening audit-only em VPS de produção e revisar falsos positivos
 
 ## Próximas fases
 - [ ] validar em VPS real a fase dual de CA + `tls-crypt`/`tls-crypt-v2` e o cutover sem perda inesperada de clientes migrados
-- [ ] snapshots históricos de tráfego sem banco pesado
-- [ ] política opcional de hardening do host com modo audit-only por padrão
+- [x] snapshots históricos de tráfego/sessões sem banco pesado, opt-in e sem dados sensíveis desnecessários
+- [x] política de hardening do host em modo audit-only por padrão
 - [ ] testes de integração reais automatizados em VM Ubuntu 24.04
+- [ ] baseline opcional de segurança por perfil, sempre com diff/rollback antes de qualquer aplicação

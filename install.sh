@@ -35,7 +35,7 @@ apt-get install -y --no-install-recommends \
 
 info "Validando componentes Python após instalar dependências..."
 PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/oneplus-install-pycache.$$" python3 -m py_compile \
-  "$SELF_DIR/libexec/websocket_proxy.py" "$SELF_DIR/libexec/openvpn_manager.py" "$SELF_DIR/libexec/openvpn_bind_identity.py" "$SELF_DIR/libexec/release_verify.py" "$SELF_DIR/libexec/github_release.py" "$SELF_DIR/scripts/test-websocket.py" "$SELF_DIR/scripts/test-release.py" "$SELF_DIR/scripts/test-update-metadata.py"
+  "$SELF_DIR/libexec/websocket_proxy.py" "$SELF_DIR/libexec/openvpn_manager.py" "$SELF_DIR/libexec/openvpn_bind_identity.py" "$SELF_DIR/libexec/release_verify.py" "$SELF_DIR/libexec/github_release.py" "$SELF_DIR/libexec/history_snapshot.py" "$SELF_DIR/libexec/history_summary.py" "$SELF_DIR/scripts/test-websocket.py" "$SELF_DIR/scripts/test-release.py" "$SELF_DIR/scripts/test-update-metadata.py" "$SELF_DIR/scripts/test-history.py"
 rm -rf -- "${TMPDIR:-/tmp}/oneplus-install-pycache.$$" 2>/dev/null || true
 
 # dnstt v1.20260501.0 requer Go 1.24+.
@@ -46,7 +46,7 @@ else
 fi
 
 install -d -m 0755 /opt/oneplus /usr/local/lib/oneplus/bin /etc/oneplus /var/lib/oneplus /var/log/oneplus
-install -d -m 0700 /var/lib/oneplus/users
+install -d -m 0700 /var/lib/oneplus/users /var/lib/oneplus/history
 install -d -m 0700 -o root -g root /etc/oneplus/dropbear
 install -d -m 0711 -o root -g root /etc/oneplus/openvpn
 install -d -m 0700 -o root -g root /etc/oneplus/openvpn/pki
@@ -90,6 +90,7 @@ fi
 [[ -e /etc/oneplus/openvpn.env ]] || install -m 0640 -o root -g root /opt/oneplus/defaults/openvpn.env /etc/oneplus/openvpn.env
 [[ -e /etc/oneplus/mux.env ]] || install -m 0640 -o root -g oneplus-mux /opt/oneplus/defaults/mux.env /etc/oneplus/mux.env
 [[ -e /etc/oneplus/firewall.env ]] || install -m 0640 -o root -g root /opt/oneplus/defaults/firewall.env /etc/oneplus/firewall.env
+[[ -e /etc/oneplus/history.env ]] || install -m 0640 -o root -g root /opt/oneplus/defaults/history.env /etc/oneplus/history.env
 chown root:root /etc/oneplus/oneplus.conf && chmod 0644 /etc/oneplus/oneplus.conf
 chown root:oneplus-badvpn /etc/oneplus/badvpn.env && chmod 0640 /etc/oneplus/badvpn.env
 chown root:oneplus-dnstt /etc/oneplus/slowdns.env && chmod 0640 /etc/oneplus/slowdns.env
@@ -100,6 +101,7 @@ chown root:oneplus-tls /etc/oneplus/tls.env && chmod 0640 /etc/oneplus/tls.env
 chown root:root /etc/oneplus/openvpn.env && chmod 0640 /etc/oneplus/openvpn.env
 chown root:oneplus-mux /etc/oneplus/mux.env && chmod 0640 /etc/oneplus/mux.env
 chown root:root /etc/oneplus/firewall.env && chmod 0640 /etc/oneplus/firewall.env
+chown root:root /etc/oneplus/history.env && chmod 0640 /etc/oneplus/history.env
 
 ensure_env_key() {
   local file="$1" key="$2" value="$3"
@@ -131,6 +133,8 @@ install -m 0644 /opt/oneplus/systemd/oneplus-openvpn-pki-maintenance.service /et
 install -m 0644 /opt/oneplus/systemd/oneplus-openvpn-pki-maintenance.timer /etc/systemd/system/oneplus-openvpn-pki-maintenance.timer
 install -m 0644 /opt/oneplus/systemd/oneplus-mux.service /etc/systemd/system/oneplus-mux.service
 install -m 0644 /opt/oneplus/systemd/oneplus-firewall.service /etc/systemd/system/oneplus-firewall.service
+install -m 0644 /opt/oneplus/systemd/oneplus-history.service /etc/systemd/system/oneplus-history.service
+install -m 0644 /opt/oneplus/systemd/oneplus-history.timer /etc/systemd/system/oneplus-history.timer
 ln -sfn /opt/oneplus/bin/oneplus /usr/local/bin/oneplus
 
 if command -v systemd-analyze >/dev/null 2>&1; then
@@ -147,7 +151,9 @@ if command -v systemd-analyze >/dev/null 2>&1; then
     /etc/systemd/system/oneplus-openvpn-pki-maintenance.service \
     /etc/systemd/system/oneplus-openvpn-pki-maintenance.timer \
     /etc/systemd/system/oneplus-mux.service \
-    /etc/systemd/system/oneplus-firewall.service
+    /etc/systemd/system/oneplus-firewall.service \
+    /etc/systemd/system/oneplus-history.service \
+    /etc/systemd/system/oneplus-history.timer
 fi
 systemctl daemon-reload
 /opt/oneplus/modules/users.sh init
@@ -180,5 +186,5 @@ systemctl enable --now oneplus-openvpn-pki-maintenance.timer
 printf "\n%bInstalação concluída.%b\n" "$C_GREEN" "$C_RESET"
 printf "Execute: %boneplus%b\n" "$C_BOLD" "$C_RESET"
 printf "Verifique: %boneplus --check%b\n" "$C_BOLD" "$C_RESET"
-printf "Dropbear, WebSocket, TLS, OpenVPN, Multiplexador, Firewall/NAT, BadVPN e SlowDNS permanecem desabilitados até serem configurados no menu.\n"
+printf "Dropbear, WebSocket, TLS, OpenVPN, Multiplexador, Firewall/NAT, BadVPN, SlowDNS e Histórico permanecem desabilitados até serem configurados no menu.\n"
 printf "A manutenção segura de expiração/limites de usuários e a manutenção de PKI OpenVPN estão ativas via systemd timers.\n"

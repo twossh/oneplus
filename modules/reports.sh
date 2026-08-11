@@ -79,6 +79,12 @@ generate_full_report() {
     report_interface_traffic
     printf '\n=== OnePlus nftables counters ===\n'
     report_nft_counters
+    printf '\n=== Historical summary (24h) ===\n'
+    if [[ -x /opt/oneplus/libexec/history_summary.py && -d /var/lib/oneplus/history ]]; then
+      python3 /opt/oneplus/libexec/history_summary.py --history-dir /var/lib/oneplus/history --hours 24 2>/dev/null || true
+    else
+      printf 'Histórico leve não configurado.\n'
+    fi
     printf '\n=== OnePlus services ===\n'
     systemctl --no-pager --full status 'oneplus-*.service' 'oneplus-*.timer' 2>/dev/null || true
     printf '\n=== Recent logins ===\n'

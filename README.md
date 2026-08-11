@@ -1,4 +1,4 @@
-# OnePlus v0.6.1
+# OnePlus v0.7.0
 
 Gerenciador CLI de usuários, SSH, VPN e serviços de conectividade para Ubuntu 24.04 ou superior, administrado exclusivamente pelo terminal.
 
@@ -17,7 +17,7 @@ apt-get update && apt-get install -y curl ca-certificates && bash <(curl -fsSL h
 Para uma tag/branch específica:
 
 ```bash
-ONEPLUS_REF=v0.6.1 bash <(curl -fsSL https://raw.githubusercontent.com/twossh/oneplus/main/setup.sh)
+ONEPLUS_REF=v0.7.0 bash <(curl -fsSL https://raw.githubusercontent.com/twossh/oneplus/main/setup.sh)
 ```
 
 Depois:
@@ -43,8 +43,31 @@ oneplus backup
 oneplus reports
 oneplus diagnostics
 oneplus update
+oneplus history
+oneplus hardening
 oneplus --check
 ```
+
+
+## Histórico leve sem banco
+
+A v0.7.0 adiciona snapshots históricos **opt-in** em NDJSON root-only. O coletor registra apenas métricas agregadas necessárias para operação: carga, memória disponível, uso do filesystem raiz, contadores RX/TX por interface, quantidade de contas OnePlus, sessões de login, clientes OpenVPN e estado dos serviços.
+
+Ele **não persiste usernames, IPs remotos, comandos, senhas ou payloads**. A coleta periódica fica desabilitada após a instalação e só é ativada pelo administrador em `oneplus history`. Intervalos permitidos: 1, 5, 15, 30 ou 60 minutos; retenção: 1 a 90 dias.
+
+Os dados ficam em:
+
+```text
+/var/lib/oneplus/history/YYYY-MM-DD.ndjson
+```
+
+O resumo calcula carga média/máxima, memória mínima disponível, pico de uso da raiz, máximos de sessões/clientes e deltas de tráfego entre snapshots, sem banco de dados.
+
+## Hardening audit-only
+
+`oneplus hardening` audita o host sem aplicar mudanças. Ele revisa sintaxe/estado efetivo do OpenSSH, root login, MaxAuthTries, banner Ubuntu, unattended-upgrades, AppArmor, NTP, units falhas, reboot pendente, permissões do OnePlus, validade de certificados, listeners, firewall e IPv4 forwarding.
+
+O módulo **não instala/atualiza pacotes, não reinicia serviços, não altera sysctl, não edita SSH e não cria/remove regras de firewall**. Isso evita que uma recomendação automática corte o único acesso administrativo da VPS. Veja `docs/HARDENING.md`.
 
 
 ## OpenVPN mTLS opcional por dispositivo
@@ -257,9 +280,11 @@ oneplus-badvpn.service
 oneplus-slowdns.service
 oneplus-user-maintenance.service
 oneplus-user-maintenance.timer
+oneplus-history.service
+oneplus-history.timer
 ```
 
-Os timers de manutenção de usuários e de PKI OpenVPN são habilitados automaticamente; o timer de PKI não altera nada enquanto não houver certificados com rotação agendada. Protocolos e NAT permanecem sob decisão explícita do administrador.
+Os timers de manutenção de usuários e de PKI OpenVPN são habilitados automaticamente; o timer de PKI não altera nada enquanto não houver certificados com rotação agendada. O timer de histórico é instalado, mas permanece desabilitado até `oneplus history`. Protocolos, NAT e coleta histórica permanecem sob decisão explícita do administrador.
 
 ## Validação antes do GitHub
 
@@ -269,6 +294,8 @@ sudo bash scripts/test-users.sh
 sudo bash scripts/test-openvpn.sh
 bash scripts/test-mux.sh
 bash scripts/test-operations.sh
+python3 scripts/test-history.py
+bash scripts/test-hardening.sh
 python3 scripts/test-websocket.py
 systemd-analyze verify systemd/*.service systemd/*.timer
 ```

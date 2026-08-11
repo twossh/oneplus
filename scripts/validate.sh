@@ -8,13 +8,13 @@ fail() { printf '[ERRO] %s\n' "$*" >&2; FAILED=1; }
 ok()   { printf '[OK] %s\n' "$*"; }
 
 required=(
-  VERSION README.md CHANGELOG.md docs/RELEASES.md docs/OPENVPN-PKI-ROTATION.md release/README.md setup.sh install.sh uninstall.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-operations.sh scripts/test-release.py scripts/test-update-metadata.py scripts/fix-permissions.sh scripts/git-fix-modes.sh scripts/release-keygen.sh scripts/release-prepare.sh scripts/release-sign.sh
+  VERSION README.md CHANGELOG.md docs/RELEASES.md docs/OPENVPN-PKI-ROTATION.md docs/HARDENING.md release/README.md setup.sh install.sh uninstall.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-operations.sh scripts/test-release.py scripts/test-update-metadata.py scripts/test-history.py scripts/test-hardening.sh scripts/fix-permissions.sh scripts/git-fix-modes.sh scripts/release-keygen.sh scripts/release-prepare.sh scripts/release-sign.sh
   bin/oneplus lib/common.sh lib/os.sh
-  modules/system.sh modules/ssh.sh modules/dropbear.sh modules/websocket.sh modules/tls.sh modules/openvpn.sh modules/mux.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh modules/firewall.sh modules/backup.sh modules/reports.sh modules/diagnostics.sh modules/update.sh
-  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-openvpn-pki-maintenance libexec/run-mux libexec/run-firewall libexec/websocket_proxy.py libexec/openvpn_manager.py libexec/openvpn_bind_identity.py libexec/release_verify.py libexec/github_release.py
-  defaults/oneplus.conf defaults/badvpn.env defaults/slowdns.env defaults/users.conf defaults/dropbear.env defaults/websocket.env defaults/tls.env defaults/openvpn.env defaults/mux.env defaults/firewall.env
+  modules/system.sh modules/ssh.sh modules/dropbear.sh modules/websocket.sh modules/tls.sh modules/openvpn.sh modules/mux.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh modules/firewall.sh modules/backup.sh modules/reports.sh modules/diagnostics.sh modules/update.sh modules/history.sh modules/hardening.sh
+  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-openvpn-pki-maintenance libexec/run-mux libexec/run-firewall libexec/run-history libexec/websocket_proxy.py libexec/openvpn_manager.py libexec/openvpn_bind_identity.py libexec/release_verify.py libexec/github_release.py libexec/history_snapshot.py libexec/history_summary.py
+  defaults/oneplus.conf defaults/badvpn.env defaults/slowdns.env defaults/users.conf defaults/dropbear.env defaults/websocket.env defaults/tls.env defaults/openvpn.env defaults/mux.env defaults/firewall.env defaults/history.env
   systemd/oneplus-badvpn.service systemd/oneplus-slowdns.service systemd/oneplus-dropbear.service systemd/oneplus-websocket.service systemd/oneplus-tls.service systemd/oneplus-openvpn.service systemd/oneplus-openvpn-pki-maintenance.service systemd/oneplus-openvpn-pki-maintenance.timer systemd/oneplus-mux.service systemd/oneplus-firewall.service
-  systemd/oneplus-user-maintenance.service systemd/oneplus-user-maintenance.timer
+  systemd/oneplus-user-maintenance.service systemd/oneplus-user-maintenance.timer systemd/oneplus-history.service systemd/oneplus-history.timer
   scripts/test-websocket.py
 )
 
@@ -30,7 +30,7 @@ mapfile -t shell_files < <(
   {
     find "$ROOT_DIR" -type f -name '*.sh' -not -path '*/.git/*' -print
     printf '%s\n' "$ROOT_DIR/bin/oneplus" "$ROOT_DIR/libexec/run-badvpn" "$ROOT_DIR/libexec/run-slowdns" "$ROOT_DIR/libexec/run-user-maintenance" \
-      "$ROOT_DIR/libexec/run-dropbear" "$ROOT_DIR/libexec/run-websocket" "$ROOT_DIR/libexec/run-tls" "$ROOT_DIR/libexec/run-openvpn" "$ROOT_DIR/libexec/run-openvpn-pki-maintenance" "$ROOT_DIR/libexec/run-mux" "$ROOT_DIR/libexec/run-firewall"
+      "$ROOT_DIR/libexec/run-dropbear" "$ROOT_DIR/libexec/run-websocket" "$ROOT_DIR/libexec/run-tls" "$ROOT_DIR/libexec/run-openvpn" "$ROOT_DIR/libexec/run-openvpn-pki-maintenance" "$ROOT_DIR/libexec/run-mux" "$ROOT_DIR/libexec/run-firewall" "$ROOT_DIR/libexec/run-history"
   } | sort -u
 )
 
@@ -46,9 +46,9 @@ done
 (( FAILED == 0 )) && ok "Sintaxe Bash e finais de linha validados."
 
 executables=(setup.sh install.sh uninstall.sh bin/oneplus lib/common.sh lib/os.sh \
-  modules/system.sh modules/ssh.sh modules/dropbear.sh modules/websocket.sh modules/tls.sh modules/openvpn.sh modules/mux.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh modules/firewall.sh modules/backup.sh modules/reports.sh modules/diagnostics.sh modules/update.sh \
-  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-openvpn-pki-maintenance libexec/run-mux libexec/run-firewall libexec/websocket_proxy.py libexec/openvpn_manager.py libexec/openvpn_bind_identity.py libexec/release_verify.py libexec/github_release.py \
-  scripts/validate.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-operations.sh scripts/test-release.py scripts/test-update-metadata.py scripts/fix-permissions.sh scripts/git-fix-modes.sh scripts/release-keygen.sh scripts/release-prepare.sh scripts/release-sign.sh scripts/test-websocket.py scripts/test-update-metadata.py)
+  modules/system.sh modules/ssh.sh modules/dropbear.sh modules/websocket.sh modules/tls.sh modules/openvpn.sh modules/mux.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh modules/firewall.sh modules/backup.sh modules/reports.sh modules/diagnostics.sh modules/update.sh modules/history.sh modules/hardening.sh \
+  libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-openvpn-pki-maintenance libexec/run-mux libexec/run-firewall libexec/run-history libexec/websocket_proxy.py libexec/openvpn_manager.py libexec/openvpn_bind_identity.py libexec/release_verify.py libexec/github_release.py libexec/history_snapshot.py libexec/history_summary.py \
+  scripts/validate.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-operations.sh scripts/test-release.py scripts/test-update-metadata.py scripts/test-history.py scripts/test-hardening.sh scripts/fix-permissions.sh scripts/git-fix-modes.sh scripts/release-keygen.sh scripts/release-prepare.sh scripts/release-sign.sh scripts/test-websocket.py scripts/test-update-metadata.py)
 for rel in "${executables[@]}"; do
   [[ -x "$ROOT_DIR/$rel" ]] || fail "Permissão executável ausente: $rel"
 done
@@ -110,7 +110,7 @@ fi
 
 
 if command -v python3 >/dev/null 2>&1; then
-  if ! PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/oneplus-pycache.$$" python3 -m py_compile "$ROOT_DIR/libexec/websocket_proxy.py" "$ROOT_DIR/libexec/openvpn_manager.py" "$ROOT_DIR/libexec/openvpn_bind_identity.py" "$ROOT_DIR/libexec/release_verify.py" "$ROOT_DIR/libexec/github_release.py" "$ROOT_DIR/scripts/test-websocket.py" "$ROOT_DIR/scripts/test-release.py" "$ROOT_DIR/scripts/test-update-metadata.py"; then
+  if ! PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/oneplus-pycache.$$" python3 -m py_compile "$ROOT_DIR/libexec/websocket_proxy.py" "$ROOT_DIR/libexec/openvpn_manager.py" "$ROOT_DIR/libexec/openvpn_bind_identity.py" "$ROOT_DIR/libexec/release_verify.py" "$ROOT_DIR/libexec/github_release.py" "$ROOT_DIR/libexec/history_snapshot.py" "$ROOT_DIR/libexec/history_summary.py" "$ROOT_DIR/scripts/test-websocket.py" "$ROOT_DIR/scripts/test-release.py" "$ROOT_DIR/scripts/test-update-metadata.py" "$ROOT_DIR/scripts/test-history.py"; then
     fail "Erro de sintaxe Python em componente OnePlus."
   else
     ok "Sintaxe Python dos componentes validada."
@@ -373,6 +373,45 @@ else
 fi
 if ! grep -Fq 'oneplus update --check' "$ROOT_DIR/bin/oneplus" || ! grep -Fq 'signed_update_latest' "$ROOT_DIR/modules/update.sh"; then
   fail "CLI de verificação/atualização da release mais recente ausente."
+fi
+
+
+# Fase 5: histórico leve opt-in e hardening audit-only.
+if ! grep -Eq '^HISTORY_INTERVAL_MINUTES=(1|5|15|30|60)$' "$ROOT_DIR/defaults/history.env" || \
+   ! grep -Eq '^HISTORY_RETENTION_DAYS=([1-9]|[1-8][0-9]|90)$' "$ROOT_DIR/defaults/history.env"; then
+  fail "Configuração padrão do histórico leve inválida."
+else
+  ok "Configuração do histórico leve validada."
+fi
+if ! grep -Fq 'OnUnitActiveSec=5min' "$ROOT_DIR/systemd/oneplus-history.timer" || \
+   grep -Fq 'Persistent=true' "$ROOT_DIR/systemd/oneplus-history.timer"; then
+  fail "Timer do histórico deve ser leve, monotônico e sem catch-up de snapshots perdidos."
+else
+  ok "Timer de histórico é opt-in e não tenta reconstruir snapshots perdidos."
+fi
+if ! grep -Fq 'O_NOFOLLOW' "$ROOT_DIR/libexec/history_snapshot.py" || \
+   ! grep -Fq 'st.st_nlink != 1' "$ROOT_DIR/libexec/history_snapshot.py" || \
+   ! grep -Fq '"schema": 1' "$ROOT_DIR/libexec/history_snapshot.py"; then
+  fail "Coletor de histórico não contém proteções de arquivo/schema esperadas."
+else
+  ok "Histórico usa NDJSON root-only com proteção contra symlink/hardlink."
+fi
+if grep -Eq '"remote_ip"|"password"|"payload"|authorized_keys' "$ROOT_DIR/libexec/history_snapshot.py"; then
+  fail "Histórico leve não deve persistir IP remoto, senha, payload ou material de autenticação."
+else
+  ok "Histórico evita dados sensíveis/identificáveis desnecessários."
+fi
+if ! grep -Fq 'Modo: AUDIT-ONLY' "$ROOT_DIR/modules/hardening.sh" || \
+   ! grep -Fq 'Nenhuma alteração foi aplicada.' "$ROOT_DIR/modules/hardening.sh"; then
+  fail "Módulo hardening deve declarar e preservar modo audit-only."
+fi
+if grep -Eq '^[[:space:]]*(sudo[[:space:]]+)?(apt|apt-get)[[:space:]].*(install|upgrade|dist-upgrade)|^[[:space:]]*systemctl[[:space:]]+(start|stop|restart|enable|disable|mask|unmask)|^[[:space:]]*nft[[:space:]]+(add|delete|flush)|^[[:space:]]*sysctl[[:space:]]+-w' "$ROOT_DIR/modules/hardening.sh"; then
+  fail "Hardening audit-only contém primitiva mutável proibida."
+else
+  ok "Hardening não aplica alterações ao host."
+fi
+if ! grep -Fq 'oneplus history' "$ROOT_DIR/bin/oneplus" || ! grep -Fq 'oneplus hardening' "$ROOT_DIR/bin/oneplus"; then
+  fail "CLI de histórico/hardening ausente."
 fi
 
 if [[ "$FAILED" -ne 0 ]]; then

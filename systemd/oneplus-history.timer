@@ -1,0 +1,12 @@
+[Unit]
+Description=Collect OnePlus lightweight history snapshots
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+RandomizedDelaySec=15s
+Unit=oneplus-history.service
+
+[Install]
+WantedBy=timers.target

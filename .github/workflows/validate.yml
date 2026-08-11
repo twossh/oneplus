@@ -34,6 +34,12 @@ jobs:
       - name: Operations/security tests
         run: bash scripts/test-operations.sh
 
+      - name: Lightweight history tests
+        run: python3 scripts/test-history.py
+
+      - name: Hardening audit-only tests
+        run: bash scripts/test-hardening.sh
+
       - name: Signed release archive security tests
         run: python3 scripts/test-release.py
 

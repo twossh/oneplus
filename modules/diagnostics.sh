@@ -43,6 +43,15 @@ diagnostics_run() {
     diag_cmd "Rotação PKI OpenVPN consistente" bash -c "grep -Fqx 'STATE=prepared' /etc/oneplus/openvpn/rotation/state.conf && test -s /etc/oneplus/openvpn/rotation/ca-bundle.crt && test -s /etc/oneplus/openvpn/rotation/crl-bundle.pem && test -s /etc/oneplus/openvpn/rotation/next/tls-crypt-v2-server.key"
   fi
   diag_cmd "Config firewall" test -r /etc/oneplus/firewall.env
+  diag_cmd "Config histórico leve" test -r /etc/oneplus/history.env
+  if systemctl is-enabled --quiet oneplus-history.timer 2>/dev/null; then
+    diag_cmd "Timer de histórico ativo" systemctl is-active oneplus-history.timer
+  else
+    diag_ok "Histórico leve permanece opt-in/desabilitado"
+  fi
+  if [[ -d /var/lib/oneplus/history ]]; then
+    [[ "$(stat -c '%a:%U:%G' /var/lib/oneplus/history)" == "700:root:root" ]] && diag_ok "Histórico root-only" || diag_fail "Permissão incorreta em /var/lib/oneplus/history"
+  fi
 
   local f
   for f in \
@@ -88,7 +97,7 @@ diagnostics_run() {
   fi
 
   printf "\nServiços:\n"
-  for unit in ssh.service oneplus-dropbear.service oneplus-websocket.service oneplus-tls.service oneplus-openvpn.service oneplus-mux.service oneplus-firewall.service oneplus-badvpn.service oneplus-slowdns.service oneplus-user-maintenance.timer oneplus-openvpn-pki-maintenance.timer; do
+  for unit in ssh.service oneplus-dropbear.service oneplus-websocket.service oneplus-tls.service oneplus-openvpn.service oneplus-mux.service oneplus-firewall.service oneplus-badvpn.service oneplus-slowdns.service oneplus-user-maintenance.timer oneplus-openvpn-pki-maintenance.timer oneplus-history.timer; do
     printf "  %-34s %b\n" "$unit" "$(service_state "$unit")"
   done
 
@@ -104,7 +113,7 @@ diagnostics_run() {
 repair_permissions() {
   require_root
   install -d -m 0755 -o root -g root /etc/oneplus /var/lib/oneplus
-  install -d -m 0700 -o root -g root /var/lib/oneplus/users /var/lib/oneplus/rollback /var/lib/oneplus/openvpn-pki-archives /etc/oneplus/openvpn/pki /etc/oneplus/openvpn/clients /etc/oneplus/dropbear
+  install -d -m 0700 -o root -g root /var/lib/oneplus/users /var/lib/oneplus/history /var/lib/oneplus/rollback /var/lib/oneplus/openvpn-pki-archives /etc/oneplus/openvpn/pki /etc/oneplus/openvpn/clients /etc/oneplus/dropbear
   install -d -m 0711 -o root -g root /var/lib/oneplus/openvpn-authz
   install -d -m 0711 -o root -g root /etc/oneplus/openvpn /etc/oneplus/openvpn/ca-db
   [[ ! -d /etc/oneplus/openvpn/rotation ]] || install -d -m 0711 -o root -g root /etc/oneplus/openvpn/rotation
@@ -117,6 +126,7 @@ repair_permissions() {
   [[ -f /etc/oneplus/dropbear.env ]] && chown root:root /etc/oneplus/dropbear.env && chmod 0640 /etc/oneplus/dropbear.env
   [[ -f /etc/oneplus/openvpn.env ]] && chown root:root /etc/oneplus/openvpn.env && chmod 0640 /etc/oneplus/openvpn.env
   [[ -f /etc/oneplus/firewall.env ]] && chown root:root /etc/oneplus/firewall.env && chmod 0640 /etc/oneplus/firewall.env
+  [[ -f /etc/oneplus/history.env ]] && chown root:root /etc/oneplus/history.env && chmod 0640 /etc/oneplus/history.env
   [[ -f /etc/oneplus/badvpn.env ]] && chown root:oneplus-badvpn /etc/oneplus/badvpn.env && chmod 0640 /etc/oneplus/badvpn.env
   [[ -f /etc/oneplus/slowdns.env ]] && chown root:oneplus-dnstt /etc/oneplus/slowdns.env && chmod 0640 /etc/oneplus/slowdns.env
   [[ -f /etc/oneplus/websocket.env ]] && chown root:oneplus-ws /etc/oneplus/websocket.env && chmod 0640 /etc/oneplus/websocket.env
