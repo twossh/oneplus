@@ -45,7 +45,7 @@ health_check() {
   }
 
   check_item "Ubuntu 24.04+" check_supported_os
-  check_item "OpenSSH: configuração válida" sshd -t
+  check_item "OpenSSH: configuração válida" openssh_config_test
   check_item "Launcher instalado" test -L /usr/local/bin/oneplus
   check_item "Árvore /opt/oneplus" test -r /opt/oneplus/VERSION
   check_item "BadVPN UDPGW instalado" test -x /usr/local/lib/oneplus/bin/badvpn-udpgw

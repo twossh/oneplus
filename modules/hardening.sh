@@ -44,7 +44,7 @@ hardening_audit() {
   fi
 
   local sshout rootlogin passwordauth maxauth debianbanner
-  if sshd -t >/dev/null 2>&1; then
+  if openssh_config_test >/dev/null 2>&1; then
     hardening_emit PASS "OpenSSH: sintaxe válida"
     sshout=$(sshd -T 2>/dev/null || true)
     rootlogin=$(awk '$1=="permitrootlogin"{print $2;exit}' <<< "$sshout")

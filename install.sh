@@ -19,6 +19,10 @@ info "Sistema: $(show_os_line)"
 info "Arquitetura: $(dpkg --print-architecture)"
 
 export DEBIAN_FRONTEND=noninteractive
+SSHL_WAS_INSTALLED=no
+if dpkg-query -W -f='${Status}' sslh 2>/dev/null | grep -Fq 'install ok installed'; then
+  SSHL_WAS_INSTALLED=yes
+fi
 apt-get update
 # Dropbear e stunnel ficam no componente Universe em Ubuntu. Imagens mínimas
 # podem não trazê-lo habilitado, então fazemos um fallback controlado.
@@ -32,6 +36,21 @@ apt-get install -y --no-install-recommends \
   openssh-server dropbear-bin stunnel4 openvpn sslh python3 \
   iproute2 procps util-linux passwd libpam-modules openssl \
   rsync dnsutils lsof less nftables age minisign
+
+# O pacote sslh do Ubuntu pode habilitar/iniciar seu serviço vendor durante a
+# primeira instalação. O OnePlus usa exclusivamente oneplus-mux.service.
+# Só neutralizamos o serviço vendor quando o próprio OnePlus acabou de instalar
+# o pacote; uma instalação sslh já existente do administrador não é alterada.
+if [[ "$SSHL_WAS_INSTALLED" == no ]]; then
+  systemctl disable --now sslh.service 2>/dev/null || true
+  systemctl reset-failed sslh.service 2>/dev/null || true
+fi
+
+# Ubuntu 24.04 pode operar OpenSSH por socket activation sem ter iniciado
+# ssh.service ainda. Nessa situação /run/sshd pode não existir, embora a
+# configuração esteja correta. Criamos somente o runtime efêmero esperado pelo
+# sshd antes de qualquer validação; nunca alteramos sshd_config aqui.
+ensure_openssh_runtime_dir
 
 info "Validando componentes Python após instalar dependências..."
 PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/oneplus-install-pycache.$$" python3 -m py_compile \
@@ -168,7 +187,7 @@ info "Instalando BadVPN UDPGW (compatibilidade SSH UDP)..."
 info "Instalando SlowDNS/dnstt v1.20260501.0..."
 /opt/oneplus/modules/slowdns.sh install-binary
 
-if sshd -t; then
+if openssh_config_test; then
   ok "OpenSSH atual está válido; nenhuma configuração SSH foi substituída."
 else
   error "A configuração OpenSSH existente já contém erro. O OnePlus não a modificou."

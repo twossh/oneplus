@@ -27,6 +27,25 @@ require_root() {
 
 command_exists() { command -v "$1" >/dev/null 2>&1; }
 
+ensure_openssh_runtime_dir() {
+  local dir=/run/sshd
+  if [[ -L "$dir" ]]; then
+    error "$dir não pode ser link simbólico."
+    return 1
+  fi
+  if [[ -e "$dir" && ! -d "$dir" ]]; then
+    error "$dir existe mas não é diretório."
+    return 1
+  fi
+  install -d -m 0755 -o root -g root "$dir"
+}
+
+openssh_config_test() {
+  command_exists sshd || { error "sshd não está instalado."; return 1; }
+  ensure_openssh_runtime_dir || return 1
+  sshd -t
+}
+
 service_state() {
   local unit="$1"
   if systemctl is-active --quiet "$unit" 2>/dev/null; then

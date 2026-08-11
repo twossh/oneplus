@@ -444,6 +444,11 @@ if ! grep -Fq 'ONEPLUS_INTEGRATION_BASE_DIR' "$ROOT_DIR/.github/workflows/integr
   fail "Teste de upgrade/preservação de configuração ausente."
 else
   ok "Integração testa upgrade/reinstall e preservação de configuração."
+
+grep -Fq 'openssh_config_test()' "$ROOT_DIR/lib/common.sh" || fail "wrapper seguro de validação OpenSSH ausente"
+grep -Fq 'ensure_openssh_runtime_dir' "$ROOT_DIR/install.sh" || fail "instalador não prepara runtime OpenSSH"
+grep -Fq 'SSHL_WAS_INSTALLED' "$ROOT_DIR/install.sh" || fail "instalador não isola serviço vendor sslh recém-instalado"
+ok "Compatibilidade OpenSSH socket-activation e isolamento do sslh vendor validados."
 fi
 
 if [[ "$FAILED" -ne 0 ]]; then

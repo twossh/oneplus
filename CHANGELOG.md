@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.1
+- corrige a primeira falha encontrada pela integração real Ubuntu 24.04.4;
+- prepara `/run/sshd` de forma segura antes de validar OpenSSH em hosts com socket activation;
+- troca chamadas operacionais diretas de `sshd -t` pelo wrapper `openssh_config_test`;
+- prepara `/run/sshd` também antes de instalar releases históricas no cenário de upgrade do CI;
+- neutraliza `sslh.service` vendor somente quando o pacote `sslh` acabou de ser instalado pelo próprio OnePlus, preservando instalações preexistentes do administrador;
+- corrige upload de relatórios root-only fazendo staging em `$RUNNER_TEMP`;
+- atualiza `actions/upload-artifact` para v7/Node 24;
+- mantém todas as correções limitadas a compatibilidade/homologação, sem adicionar novas funcionalidades de rede.
+
 ## 0.8.0 — 2026-08-10
 
 ### Integração real em Ubuntu 24.04

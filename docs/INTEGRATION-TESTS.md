@@ -95,3 +95,7 @@ Mesmo com CI verde, ainda são testes separados:
 - migração mTLS de dispositivos físicos.
 
 CI reduz regressões; não substitui homologação em uma VPS descartável com clientes reais.
+
+## Compatibilidade com OpenSSH socket activation
+
+Em imagens Ubuntu 24.04 onde `ssh.socket` está escutando mas `ssh.service` ainda não iniciou, `/run/sshd` pode não existir. A integração cria somente esse diretório runtime efêmero (`root:root`, `0755`) antes de `sshd -t`. O instalador v0.8.1 faz a mesma preparação e rejeita symlink ou objeto não-diretório nesse caminho.

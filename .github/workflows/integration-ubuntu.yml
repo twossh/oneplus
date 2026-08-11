@@ -104,13 +104,28 @@ jobs:
           sudo ss -lntup || true
           sudo /usr/local/bin/oneplus --check || true
 
+      - name: Stage integration report
+        if: always()
+        shell: bash
+        run: |
+          stage="$RUNNER_TEMP/oneplus-integration-artifacts"
+          rm -rf "$stage"
+          mkdir -p "$stage"
+          if sudo test -d /var/log/oneplus/integration; then
+            sudo find /var/log/oneplus/integration -maxdepth 1 -type f -name '*.log' \
+              -exec cp -a -- '{}' "$stage/" ';'
+          fi
+          if sudo test -f /var/lib/oneplus/integration/post-reboot.result; then
+            sudo cp -a -- /var/lib/oneplus/integration/post-reboot.result "$stage/"
+          fi
+          sudo chown -R "$(id -u):$(id -g)" "$stage"
+          find "$stage" -maxdepth 1 -type f -printf '%f\n' | sort || true
+
       - name: Publish integration report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: oneplus-integration-${{ github.run_id }}
-          path: |
-            /var/log/oneplus/integration/*.log
-            /var/lib/oneplus/integration/post-reboot.result
+          path: ${{ runner.temp }}/oneplus-integration-artifacts/
           if-no-files-found: ignore
           retention-days: 7

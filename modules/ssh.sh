@@ -3,7 +3,7 @@
 SSH_SNIPPET=/etc/ssh/sshd_config.d/60-oneplus.conf
 
 ssh_apply_current_config() {
-  if ! sshd -t; then
+  if ! openssh_config_test; then
     error "sshd -t rejeitou a configuração."
     return 1
   fi
@@ -52,7 +52,7 @@ EOF2
     rm -f "$SSH_SNIPPET"
   fi
   rm -f "$previous"
-  sshd -t || error "A configuração OpenSSH anterior também contém erro."
+  openssh_config_test || error "A configuração OpenSSH anterior também contém erro."
   return 1
 }
 
@@ -103,7 +103,7 @@ module_ssh() {
         fi
         pause
         ;;
-      5) sshd -t && ok "OpenSSH OK" || error "OpenSSH contém erro"; pause ;;
+      5) openssh_config_test && ok "OpenSSH OK" || error "OpenSSH contém erro"; pause ;;
       0) return 0 ;;
       *) warn "Opção inválida"; sleep 1 ;;
     esac

@@ -266,7 +266,7 @@ restore_oneplus_backup() {
   regenerate_login_limits
   if declare -F ensure_openvpn_pam >/dev/null 2>&1; then ensure_openvpn_pam; fi
 
-  if ! sshd -t; then
+  if ! openssh_config_test; then
     error "Configuração SSH restaurada é inválida. O rollback local foi preservado em: $rollback"
     return 1
   fi

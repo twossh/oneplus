@@ -1,8 +1,12 @@
-# OnePlus v0.8.0
+# OnePlus v0.8.1
 
 Gerenciador CLI de usuários, SSH, VPN e serviços de conectividade para Ubuntu 24.04 ou superior, administrado exclusivamente pelo terminal.
 
 O OnePlus é código novo. Não substitui o `sshd_config` completo, não armazena senhas em texto puro, não apaga `crontab`, não executa `iptables -F` e não executa `nft flush ruleset`.
+
+### Correções da v0.8.1 após a primeira integração real
+
+A primeira execução em GitHub Actions Ubuntu 24.04.4 encontrou um caso real de socket activation do OpenSSH: `sshd -t` falhava quando `/run/sshd` ainda não tinha sido criado. A v0.8.1 prepara esse runtime efêmero com validação de tipo/permissões antes dos testes, sem alterar `sshd_config`. Também evita deixar o serviço vendor `sslh.service` em estado de falha quando o pacote é instalado pela primeira vez pelo OnePlus e faz staging dos relatórios root-only antes do upload do artifact.
 
 ## Instalação direta pelo GitHub
 

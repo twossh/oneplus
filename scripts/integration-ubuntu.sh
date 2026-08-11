@@ -70,6 +70,14 @@ install_tree() {
     chmod 0755 "$tree/scripts/fix-permissions.sh"
     bash "$tree/scripts/fix-permissions.sh"
   fi
+  # Releases históricas anteriores à v0.8.1 chamavam `sshd -t` diretamente.
+  # Em runners Ubuntu 24.04 com socket activation, /run/sshd pode ainda não
+  # existir. Preparar o runtime torna o cenário de upgrade fiel a uma VPS em uso
+  # e não modifica configuração persistente do OpenSSH.
+  if [[ -L /run/sshd || ( -e /run/sshd && ! -d /run/sshd ) ]]; then
+    fail "/run/sshd possui tipo inseguro"
+  fi
+  install -d -m 0755 -o root -g root /run/sshd
   log "Instalando OnePlus ${expected} a partir de $tree"
   bash "$tree/install.sh"
   [[ "$(/usr/local/bin/oneplus --version | awk '{print $2}')" == "$expected" ]] || fail "versão instalada não corresponde a ${expected}"

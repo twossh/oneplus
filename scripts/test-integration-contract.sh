@@ -14,6 +14,7 @@ grep -Fq 'GITHUB_ACTIONS' "$SCRIPT" || fail "detecção do runner GitHub ausente
 grep -Fq 'boot_id' "$SCRIPT" || fail "validação de reboot real por boot_id ausente"
 grep -Fq 'oneplus --check' "$SCRIPT" || fail "health check não faz parte da integração"
 grep -Fq 'sshd -t' "$SCRIPT" || fail "validação do OpenSSH não faz parte da integração"
+grep -Fq 'install -d -m 0755 -o root -g root /run/sshd' "$SCRIPT" || fail "runtime /run/sshd não é preparado para upgrade histórico"
 grep -Fq '127.0.0.1' "$SCRIPT" || fail "smoke tests devem usar loopback"
 
 if grep -Eq '^[[:space:]]*(reboot|shutdown|poweroff|systemctl[[:space:]]+reboot)([[:space:]]|$)' "$SCRIPT"; then
@@ -31,7 +32,8 @@ grep -Fq 'timeout-minutes:' "$WORKFLOW" || fail "workflow precisa de timeout"
 grep -Fq 'permissions:' "$WORKFLOW" || fail "workflow deve declarar permissões"
 grep -Fq 'contents: read' "$WORKFLOW" || fail "workflow deve usar somente leitura do repositório"
 grep -Fq 'schedule:' "$WORKFLOW" || fail "workflow semanal de regressão ausente"
-grep -Fq 'actions/upload-artifact@v4' "$WORKFLOW" || fail "relatório de integração não é publicado como artifact"
+grep -Fq 'actions/upload-artifact@v7' "$WORKFLOW" || fail "relatório de integração não usa upload-artifact atual"
+grep -Fq 'oneplus-integration-artifacts' "$WORKFLOW" || fail "workflow não faz staging seguro dos artifacts root-only"
 if grep -Eq 'runs-on:[[:space:]]*self-hosted|secrets\.' "$WORKFLOW"; then
   fail "workflow padrão não deve usar runner self-hosted nem segredos"
 fi

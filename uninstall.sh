@@ -24,7 +24,7 @@ if [[ -e /etc/ssh/sshd_config.d/60-oneplus.conf ]]; then
   ssh_backup=$(mktemp)
   cp -a /etc/ssh/sshd_config.d/60-oneplus.conf "$ssh_backup"
   rm -f /etc/ssh/sshd_config.d/60-oneplus.conf
-  if sshd -t; then
+  if openssh_config_test; then
     systemctl daemon-reload
     systemctl restart ssh.service
     rm -f "$ssh_backup"

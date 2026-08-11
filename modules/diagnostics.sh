@@ -22,7 +22,7 @@ diagnostics_run() {
   DIAG_FAILED=0
   printf "%bOnePlus • Diagnóstico completo%b\n\n" "$C_BOLD$C_CYAN" "$C_RESET"
   diag_cmd "Ubuntu suportado" check_supported_os
-  diag_cmd "OpenSSH válido" sshd -t
+  diag_cmd "OpenSSH válido" openssh_config_test
   diag_cmd "Launcher OnePlus" bash -c '[[ "$(readlink -f /usr/local/bin/oneplus 2>/dev/null)" == /opt/oneplus/bin/oneplus ]]'
   diag_cmd "Timer de usuários habilitado" systemctl is-enabled oneplus-user-maintenance.timer
   diag_cmd "Timer PKI OpenVPN habilitado" systemctl is-enabled oneplus-openvpn-pki-maintenance.timer
@@ -163,7 +163,7 @@ repair_system() {
   systemctl start oneplus-user-maintenance.timer >/dev/null 2>&1 || true
   systemctl enable oneplus-openvpn-pki-maintenance.timer >/dev/null 2>&1 || true
   systemctl start oneplus-openvpn-pki-maintenance.timer >/dev/null 2>&1 || true
-  sshd -t || { error "OpenSSH continua inválido; não foi reiniciado."; return 1; }
+  openssh_config_test || { error "OpenSSH continua inválido; não foi reiniciado."; return 1; }
   ok "Arquivos/permissões OnePlus reparados sem reiniciar protocolos de rede."
 }
 
