@@ -13,9 +13,11 @@ grep -Fq 'DESTROYABLE_VM' "$SCRIPT" || fail "token de confirmação explícita a
 grep -Fq 'GITHUB_ACTIONS' "$SCRIPT" || fail "detecção do runner GitHub ausente"
 grep -Fq 'boot_id' "$SCRIPT" || fail "validação de reboot real por boot_id ausente"
 grep -Fq 'oneplus --check' "$SCRIPT" || fail "health check não faz parte da integração"
-grep -Fq 'sshd -t' "$SCRIPT" || fail "validação do OpenSSH não faz parte da integração"
+grep -Fq 'openssh_config_test' "$SCRIPT" || fail "wrapper de validação OpenSSH não faz parte da integração final"
 grep -Fq 'install -d -m 0755 -o root -g root /run/sshd' "$SCRIPT" || fail "runtime /run/sshd não é preparado para upgrade histórico"
 grep -Fq '127.0.0.1' "$SCRIPT" || fail "smoke tests devem usar loopback"
+grep -Fq 'árvore_instalada=' "$SCRIPT" || fail "diagnóstico de divergência de versão ausente"
+grep -Fq 'systemctl is-failed --quiet sslh.service' "$SCRIPT" || fail "regressão do serviço vendor sslh não é verificada"
 
 if grep -Eq '^[[:space:]]*(reboot|shutdown|poweroff|systemctl[[:space:]]+reboot)([[:space:]]|$)' "$SCRIPT"; then
   fail "suíte não pode reiniciar a máquina automaticamente"

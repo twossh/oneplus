@@ -34,8 +34,18 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 printf '[INFO] Preparando dependências do bootstrap...\n'
-apt-get update
-apt-get install -y --no-install-recommends ca-certificates git
+bootstrap_missing=()
+for pkg in ca-certificates git; do
+  if ! dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -Fxq 'install ok installed'; then
+    bootstrap_missing+=("$pkg")
+  fi
+done
+if (( ${#bootstrap_missing[@]} )); then
+  apt-get update
+  apt-get install -y --no-install-recommends "${bootstrap_missing[@]}"
+else
+  printf '[INFO] Dependências do bootstrap já instaladas; apt ignorado.\n'
+fi
 
 TMP_DIR=$(mktemp -d /tmp/oneplus-setup.XXXXXX)
 SRC_DIR="$TMP_DIR/oneplus"

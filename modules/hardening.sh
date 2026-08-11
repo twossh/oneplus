@@ -43,8 +43,13 @@ hardening_audit() {
     hardening_emit FAIL "Sistema fora da matriz Ubuntu 24.04+"
   fi
 
-  local sshout rootlogin passwordauth maxauth debianbanner
-  if openssh_config_test >/dev/null 2>&1; then
+  local sshout rootlogin passwordauth maxauth debianbanner ssh_test_error ssh_test_rc
+  # Hardening é estritamente audit-only: não chama openssh_config_test porque o
+  # wrapper pode criar /run/sshd em hosts com socket activation. Executamos o
+  # binário diretamente e distinguimos a ausência do runtime de um erro real de
+  # configuração, sem modificar o host.
+  ssh_test_error=$(sshd -t 2>&1) && ssh_test_rc=0 || ssh_test_rc=$?
+  if (( ssh_test_rc == 0 )); then
     hardening_emit PASS "OpenSSH: sintaxe válida"
     sshout=$(sshd -T 2>/dev/null || true)
     rootlogin=$(awk '$1=="permitrootlogin"{print $2;exit}' <<< "$sshout")
@@ -67,8 +72,10 @@ hardening_audit() {
     else
       hardening_emit INFO "OpenSSH: DebianBanner=${debianbanner:-N/D}; ocultar banner do SO é opcional"
     fi
+  elif grep -Fqi 'Missing privilege separation directory' <<< "$ssh_test_error"; then
+    hardening_emit INFO "OpenSSH: /run/sshd ainda não existe sob socket activation; teste efetivo adiado para preservar audit-only"
   else
-    hardening_emit FAIL "OpenSSH: configuração inválida"
+    hardening_emit FAIL "OpenSSH: configuração inválida (${ssh_test_error:-erro sem detalhe})"
   fi
 
   if dpkg-query -W -f='${Status}' unattended-upgrades 2>/dev/null | grep -Fq 'install ok installed'; then

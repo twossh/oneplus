@@ -3,6 +3,7 @@ set -Eeuo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SELF_DIR/lib/common.sh"
 source "$SELF_DIR/lib/os.sh"
+source "$SELF_DIR/lib/install_helpers.sh"
 
 trap 'error "Falha na linha ${LINENO}. Instalação interrompida com segurança."' ERR
 
@@ -19,29 +20,58 @@ info "Sistema: $(show_os_line)"
 info "Arquitetura: $(dpkg --print-architecture)"
 
 export DEBIAN_FRONTEND=noninteractive
-SSHL_WAS_INSTALLED=no
-if dpkg-query -W -f='${Status}' sslh 2>/dev/null | grep -Fq 'install ok installed'; then
-  SSHL_WAS_INSTALLED=yes
-fi
-apt-get update
-# Dropbear e stunnel ficam no componente Universe em Ubuntu. Imagens mínimas
-# podem não trazê-lo habilitado, então fazemos um fallback controlado.
-if ! apt-cache show dropbear-bin >/dev/null 2>&1 || ! apt-cache show stunnel4 >/dev/null 2>&1 || ! apt-cache show sslh >/dev/null 2>&1 || ! apt-cache show age >/dev/null 2>&1 || ! apt-cache show minisign >/dev/null 2>&1; then
-  apt-get install -y --no-install-recommends software-properties-common
-  add-apt-repository -y universe
-  apt-get update
-fi
-apt-get install -y --no-install-recommends \
-  ca-certificates curl git build-essential \
-  openssh-server dropbear-bin stunnel4 openvpn sslh python3 \
-  iproute2 procps util-linux passwd libpam-modules openssl \
+SSLH_WAS_INSTALLED=no
+oneplus_package_installed sslh && SSLH_WAS_INSTALLED=yes
+
+APT_REFRESHED=no
+apt_refresh_once() {
+  if [[ "$APT_REFRESHED" != yes ]]; then
+    apt-get update
+    APT_REFRESHED=yes
+  fi
+}
+
+required_packages=(
+  ca-certificates curl git build-essential
+  openssh-server dropbear-bin stunnel4 openvpn sslh python3
+  iproute2 procps util-linux passwd libpam-modules openssl
   rsync dnsutils lsof less nftables age minisign
+)
+missing_packages=()
+for pkg in "${required_packages[@]}"; do
+  oneplus_package_installed "$pkg" || missing_packages+=("$pkg")
+done
+
+if (( ${#missing_packages[@]} )); then
+  info "Dependências ausentes: ${missing_packages[*]}"
+  apt_refresh_once
+  # Imagens mínimas podem não trazer Universe habilitado. Só habilitamos o
+  # componente se algum pacote realmente ausente não estiver disponível.
+  repo_missing=no
+  for pkg in "${missing_packages[@]}"; do
+    if ! apt-cache show "$pkg" >/dev/null 2>&1; then
+      repo_missing=yes
+      break
+    fi
+  done
+  if [[ "$repo_missing" == yes ]]; then
+    if ! command -v add-apt-repository >/dev/null 2>&1; then
+      apt-get install -y --no-install-recommends software-properties-common
+    fi
+    add-apt-repository -y universe
+    apt-get update
+    APT_REFRESHED=yes
+  fi
+  apt-get install -y --no-install-recommends "${missing_packages[@]}"
+else
+  info "Dependências principais já instaladas; apt não será executado novamente."
+fi
 
 # O pacote sslh do Ubuntu pode habilitar/iniciar seu serviço vendor durante a
 # primeira instalação. O OnePlus usa exclusivamente oneplus-mux.service.
 # Só neutralizamos o serviço vendor quando o próprio OnePlus acabou de instalar
 # o pacote; uma instalação sslh já existente do administrador não é alterada.
-if [[ "$SSHL_WAS_INSTALLED" == no ]]; then
+if [[ "$SSLH_WAS_INSTALLED" == no ]]; then
   systemctl disable --now sslh.service 2>/dev/null || true
   systemctl reset-failed sslh.service 2>/dev/null || true
 fi
@@ -57,11 +87,34 @@ PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/oneplus-install-pycache.$$" python3 -m py_c
   "$SELF_DIR/libexec/websocket_proxy.py" "$SELF_DIR/libexec/openvpn_manager.py" "$SELF_DIR/libexec/openvpn_bind_identity.py" "$SELF_DIR/libexec/release_verify.py" "$SELF_DIR/libexec/github_release.py" "$SELF_DIR/libexec/history_snapshot.py" "$SELF_DIR/libexec/history_summary.py" "$SELF_DIR/scripts/test-websocket.py" "$SELF_DIR/scripts/test-release.py" "$SELF_DIR/scripts/test-update-metadata.py" "$SELF_DIR/scripts/test-history.py"
 rm -rf -- "${TMPDIR:-/tmp}/oneplus-install-pycache.$$" 2>/dev/null || true
 
-# dnstt v1.20260501.0 requer Go 1.24+.
-if apt-cache show golang-1.24-go >/dev/null 2>&1; then
-  apt-get install -y --no-install-recommends golang-1.24-go
+# dnstt v1.20260501.0 requer Go 1.24+. Não chamamos apt em reinstalações
+# quando um Go compatível já está presente.
+go_ok=no
+go_version=""
+go_bin=""
+for candidate in /usr/lib/go-1.24/bin/go /usr/local/go/bin/go "$(command -v go 2>/dev/null || true)"; do
+  [[ -n "$candidate" && -x "$candidate" ]] || continue
+  candidate_version=$($candidate env GOVERSION 2>/dev/null | sed 's/^go//' || true)
+  if [[ "$candidate_version" =~ ^[0-9]+([.][0-9]+){1,2} ]] && dpkg --compare-versions "$candidate_version" ge 1.24; then
+    go_ok=yes
+    go_version="$candidate_version"
+    go_bin="$candidate"
+    break
+  fi
+done
+if [[ "$go_ok" != yes ]]; then
+  apt_refresh_once
+  if apt-cache show golang-1.24-go >/dev/null 2>&1; then
+    if ! oneplus_package_installed golang-1.24-go; then
+      apt-get install -y --no-install-recommends golang-1.24-go
+    fi
+  else
+    if ! oneplus_package_installed golang-go; then
+      apt-get install -y --no-install-recommends golang-go
+    fi
+  fi
 else
-  apt-get install -y --no-install-recommends golang-go
+  info "Go ${go_version} (${go_bin}) já atende ao dnstt; instalação de Go ignorada."
 fi
 
 install -d -m 0755 /opt/oneplus /usr/local/lib/oneplus/bin /etc/oneplus /var/lib/oneplus /var/log/oneplus
@@ -69,13 +122,14 @@ install -d -m 0700 /var/lib/oneplus/users /var/lib/oneplus/history
 install -d -m 0700 -o root -g root /etc/oneplus/dropbear
 install -d -m 0711 -o root -g root /etc/oneplus/openvpn
 install -d -m 0700 -o root -g root /etc/oneplus/openvpn/pki
-rsync -a --delete \
-  --exclude '.git' \
-  --exclude '.github' \
-  --exclude 'dist' \
-  --exclude '*.zip' \
-  --exclude '*.sha256' \
-  "$SELF_DIR/" /opt/oneplus/
+info "Sincronizando a árvore OnePlus por conteúdo (checksum)..."
+oneplus_sync_tree "$SELF_DIR" /opt/oneplus
+oneplus_verify_synced_core "$SELF_DIR" /opt/oneplus
+if [[ "$(tr -d '[:space:]' < /opt/oneplus/VERSION)" != "$(tr -d '[:space:]' < "$SELF_DIR/VERSION")" ]]; then
+  error "VERSION instalada divergiu da release de origem após sincronização."
+  exit 1
+fi
+ok "Árvore /opt/oneplus sincronizada e verificada."
 
 find /opt/oneplus -type f -name '*.sh' -exec chmod 0755 {} +
 chmod 0755 /opt/oneplus/bin/oneplus /opt/oneplus/libexec/* /opt/oneplus/scripts/*.sh /opt/oneplus/scripts/*.py

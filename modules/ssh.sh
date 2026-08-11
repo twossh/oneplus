@@ -8,12 +8,34 @@ ssh_apply_current_config() {
     return 1
   fi
   systemctl daemon-reload
-  if systemctl reload ssh.service 2>/dev/null || systemctl restart ssh.service; then
-    ok "Configuração OpenSSH validada e aplicada."
+  if systemctl is-active --quiet ssh.service 2>/dev/null; then
+    if systemctl reload ssh.service 2>/dev/null || systemctl restart ssh.service; then
+      ok "Configuração OpenSSH validada e aplicada ao ssh.service ativo."
+      return 0
+    fi
+    error "OpenSSH não aceitou reload/restart do ssh.service ativo."
+    return 1
+  fi
+
+  if systemctl is-active --quiet ssh.socket 2>/dev/null; then
+    # Com socket activation e ssh.service ainda inativo, não há daemon persistente
+    # a recarregar. A configuração validada será usada quando o socket ativar o
+    # serviço. Não reiniciamos ssh.socket para evitar uma interrupção desnecessária.
+    ok "Configuração OpenSSH validada; ssh.socket está ativo e usará a nova configuração na próxima ativação."
     return 0
   fi
-  error "OpenSSH não aceitou reload/restart."
-  return 1
+
+  if systemctl is-enabled --quiet ssh.service 2>/dev/null; then
+    if systemctl restart ssh.service; then
+      ok "Configuração OpenSSH validada e ssh.service iniciado."
+      return 0
+    fi
+    error "ssh.service habilitado não iniciou após a validação."
+    return 1
+  fi
+
+  warn "Configuração OpenSSH válida, mas ssh.service/ssh.socket não estão ativos. Nenhum serviço foi iniciado automaticamente."
+  return 0
 }
 
 ssh_write_snippet() {
@@ -60,7 +82,7 @@ module_ssh() {
   while true; do
     clear
     printf "%bOnePlus • OpenSSH%b\n\n" "$C_BOLD$C_CYAN" "$C_RESET"
-    printf "Serviço: %s\n" "$(service_state ssh.service)"
+    printf "Serviço: %s\n" "$(openssh_service_state)"
     printf "Portas:  %s\n\n" "$(ss -lntp 2>/dev/null | awk '/sshd|ssh/ {print $4}' | paste -sd ', ' - || true)"
     printf "1) Ver configuração efetiva\n"
     printf "2) Aplicar perfil compatível (senha habilitada; root por senha desabilitado)\n"
@@ -70,7 +92,7 @@ module_ssh() {
     printf "0) Voltar\n\nEscolha: "
     read -r opt
     case "$opt" in
-      1) sshd -T | sort | less ;;
+      1) ensure_openssh_runtime_dir && sshd -T | sort | less ;;
       2)
         ssh_write_snippet yes prohibit-password 100 "100:30:200"
         pause

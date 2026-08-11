@@ -78,9 +78,22 @@ install_tree() {
     fail "/run/sshd possui tipo inseguro"
   fi
   install -d -m 0755 -o root -g root /run/sshd
+  local source_version installed_version launcher_version
+  source_version=$(tr -d '[:space:]' < "$tree/VERSION")
+  [[ "$source_version" == "$expected" ]] || fail "VERSION da origem diverge do cenário: esperada=${expected} origem=${source_version}"
+
   log "Instalando OnePlus ${expected} a partir de $tree"
   bash "$tree/install.sh"
-  [[ "$(/usr/local/bin/oneplus --version | awk '{print $2}')" == "$expected" ]] || fail "versão instalada não corresponde a ${expected}"
+  installed_version=$(tr -d '[:space:]' < /opt/oneplus/VERSION 2>/dev/null || true)
+  launcher_version=$(/usr/local/bin/oneplus --version 2>/dev/null | awk '{print $2}' || true)
+  if [[ "$installed_version" != "$expected" || "$launcher_version" != "$expected" ]]; then
+    printf '[DIAG] versão esperada=%s origem=%s árvore_instalada=%s launcher=%s\n' \
+      "$expected" "$source_version" "${installed_version:-ausente}" "${launcher_version:-ausente}" >&2
+    sha256sum "$tree/VERSION" /opt/oneplus/VERSION 2>/dev/null || true
+    stat -c '[DIAG] %n size=%s mtime=%Y mode=%a' "$tree/VERSION" /opt/oneplus/VERSION 2>/dev/null || true
+    fail "versão instalada não corresponde a ${expected}"
+  fi
+  pass "versão instalada confirmada: ${expected}"
 }
 
 mark_preserved_configuration() {
@@ -332,11 +345,19 @@ smoke_history_and_timers() {
 
 smoke_security_contracts() {
   /usr/local/bin/oneplus --check
-  sshd -t
+  # Usa o mesmo wrapper do produto para cobrir socket activation, mantendo um
+  # `sshd -t` real por baixo dele.
+  # shellcheck disable=SC1091
+  source /opt/oneplus/lib/common.sh
+  openssh_config_test
+  if systemctl is-failed --quiet sslh.service 2>/dev/null; then
+    systemctl status sslh.service --no-pager -l || true
+    fail "serviço vendor sslh.service ficou em estado failed"
+  fi
   [[ "$(stat -c '%a' /var/lib/oneplus/users)" == 700 ]] || fail "permissão inesperada em users metadata"
   [[ "$(stat -c '%a' /var/lib/oneplus/history)" == 700 ]] || fail "permissão inesperada em history"
   ! grep -R -nE 'rm[[:space:]]+-rf[[:space:]]+/(bin|usr|etc)([[:space:]]|$)' /opt/oneplus >/dev/null 2>&1 || fail "padrão destrutivo encontrado após instalação"
-  pass "health check + sshd -t + permissões + contrato destrutivo"
+  pass "health check + OpenSSH + isolamento sslh vendor + permissões + contrato destrutivo"
 }
 
 write_reboot_state() {

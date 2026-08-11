@@ -26,3 +26,7 @@ opt-in, mostrar o diff, validar `sshd -t` e ter rollback.
 A documentação oficial do Ubuntu recomenda manter o sistema atualizado, permite usar snippets em
 `/etc/ssh/sshd_config.d/` e recomenda validar a configuração com `sshd -t` antes de reiniciar o
 serviço SSH. O OnePlus preserva esses princípios.
+
+## OpenSSH e socket activation
+
+O modo audit-only não cria `/run/sshd`. Se `sshd -t` retornar apenas que o diretório de privilege separation ainda não existe — situação possível antes da primeira ativação de `ssh.service` em hosts com `ssh.socket` — o relatório marca a verificação efetiva como informativa/adiada em vez de modificar o host. Ações operacionais do módulo SSH podem preparar esse runtime efêmero, mas a auditoria não.

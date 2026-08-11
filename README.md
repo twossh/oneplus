@@ -1,12 +1,14 @@
-# OnePlus v0.8.1
+# OnePlus v0.8.2
 
 Gerenciador CLI de usuários, SSH, VPN e serviços de conectividade para Ubuntu 24.04 ou superior, administrado exclusivamente pelo terminal.
 
 O OnePlus é código novo. Não substitui o `sshd_config` completo, não armazena senhas em texto puro, não apaga `crontab`, não executa `iptables -F` e não executa `nft flush ruleset`.
 
-### Correções da v0.8.1 após a primeira integração real
+### Correções e otimizações da v0.8.2 após a segunda integração real
 
-A primeira execução em GitHub Actions Ubuntu 24.04.4 encontrou um caso real de socket activation do OpenSSH: `sshd -t` falhava quando `/run/sshd` ainda não tinha sido criado. A v0.8.1 prepara esse runtime efêmero com validação de tipo/permissões antes dos testes, sem alterar `sshd_config`. Também evita deixar o serviço vendor `sslh.service` em estado de falha quando o pacote é instalado pela primeira vez pelo OnePlus e faz staging dos relatórios root-only antes do upload do artifact.
+A segunda execução real em Ubuntu 24.04 revelou um problema de upgrade mais sutil: o `rsync` podia considerar arquivos diferentes como iguais quando tinham o mesmo tamanho e o mesmo `mtime`. Isso ocorreu com `VERSION` (`0.8.0` → `0.8.1`, ambos com 6 bytes) em worktrees criados no mesmo segundo. A v0.8.2 sincroniza `/opt/oneplus` **por conteúdo (`--checksum`)**, atrasa atualizações/exclusões até o fim da transferência e verifica arquivos críticos após a cópia.
+
+A instalação também foi organizada para evitar `apt-get update/install` desnecessário quando todas as dependências já estão presentes, o estado do OpenSSH agora reconhece `ssh.socket`, o workflow ganhou um teste de regressão específico para sincronização e a atualização completa do Ubuntu exige prévia e confirmação explícita.
 
 ## Instalação direta pelo GitHub
 
@@ -21,7 +23,7 @@ apt-get update && apt-get install -y curl ca-certificates && bash <(curl -fsSL h
 Para uma tag/branch específica:
 
 ```bash
-ONEPLUS_REF=v0.8.0 bash <(curl -fsSL https://raw.githubusercontent.com/twossh/oneplus/main/setup.sh)
+ONEPLUS_REF=v0.8.2 bash <(curl -fsSL https://raw.githubusercontent.com/twossh/oneplus/main/setup.sh)
 ```
 
 Depois:
@@ -31,6 +33,8 @@ oneplus --version
 oneplus --check
 oneplus
 ```
+
+O instalador v0.8.2 verifica os pacotes já presentes e evita repetir `apt-get update/install` em reinstalações quando as dependências estão satisfeitas. Isso reduz tempo, tráfego e efeitos colaterais. Atualizações gerais do Ubuntu permanecem uma ação separada em `oneplus` → Sistema, com simulação e confirmação explícita.
 
 ## Comandos principais
 
@@ -71,7 +75,7 @@ O resumo calcula carga média/máxima, memória mínima disponível, pico de uso
 
 `oneplus hardening` audita o host sem aplicar mudanças. Ele revisa sintaxe/estado efetivo do OpenSSH, root login, MaxAuthTries, banner Ubuntu, unattended-upgrades, AppArmor, NTP, units falhas, reboot pendente, permissões do OnePlus, validade de certificados, listeners, firewall e IPv4 forwarding.
 
-O módulo **não instala/atualiza pacotes, não reinicia serviços, não altera sysctl, não edita SSH e não cria/remove regras de firewall**. Isso evita que uma recomendação automática corte o único acesso administrativo da VPS. Veja `docs/HARDENING.md`.
+O módulo **não instala/atualiza pacotes, não reinicia serviços, não altera sysctl, não edita SSH e não cria/remove regras de firewall**. Em hosts onde `ssh.socket` ainda não criou `/run/sshd`, o hardening apenas informa que a leitura efetiva do OpenSSH foi adiada; ele não cria o runtime porque isso violaria o contrato audit-only. Veja `docs/HARDENING.md`.
 
 
 ## OpenVPN mTLS opcional por dispositivo
@@ -301,6 +305,7 @@ bash scripts/test-operations.sh
 python3 scripts/test-history.py
 bash scripts/test-hardening.sh
 bash scripts/test-integration-contract.sh
+bash scripts/test-install-sync.sh
 python3 scripts/test-websocket.py
 systemd-analyze verify systemd/*.service systemd/*.timer
 ```
@@ -309,7 +314,7 @@ O GitHub Actions usa Ubuntu 24.04 e repete as validações compatíveis.
 
 ## Integração Ubuntu 24.04
 
-A v0.8.0 adiciona uma suíte de integração que instala o OnePlus de verdade em uma VM descartável Ubuntu 24.04, testa upgrade/reinstalação, serviços em `systemd`, listeners de loopback e contratos de segurança. No GitHub ela roda em `ubuntu-24.04`; para reboot real existe um modo de retomada específico para VPS/VM descartável.
+A v0.8.x adiciona e amadurece uma suíte de integração que instala o OnePlus de verdade em uma VM descartável Ubuntu 24.04, testa upgrade/reinstalação, serviços em `systemd`, listeners de loopback e contratos de segurança. No GitHub ela roda em `ubuntu-24.04`; para reboot real existe um modo de retomada específico para VPS/VM descartável.
 
 A suíte **não deve ser executada em produção**. Fora do GitHub Actions ela exige confirmação explícita:
 

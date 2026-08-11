@@ -89,7 +89,7 @@ health_check() {
   check_item "Unidade de histórico leve" systemctl cat oneplus-history.service
   check_item "Timer de histórico leve" systemctl cat oneplus-history.timer
 
-  printf "\nOpenSSH:   %b\n" "$(service_state ssh.service)"
+  printf "\nOpenSSH:   %b\n" "$(openssh_service_state)"
   printf "Dropbear:  %b\n" "$(service_state oneplus-dropbear.service)"
   printf "WebSocket: %b\n" "$(service_state oneplus-websocket.service)"
   printf "TLS:       %b\n" "$(service_state oneplus-tls.service)"
@@ -147,7 +147,7 @@ main_menu() {
     printf "%b╚════════════════════════════════════════════════════╝%b\n\n" "$C_CYAN" "$C_RESET"
     printf "Servidor: %s  |  Sessões: %s\n" "${ipaddr:-N/D}" "$users_online"
     printf "OpenSSH: %-16b Dropbear: %-16b WebSocket: %b\n" \
-      "$(service_state ssh.service)" "$(service_state oneplus-dropbear.service)" "$(service_state oneplus-websocket.service)"
+      "$(openssh_service_state)" "$(service_state oneplus-dropbear.service)" "$(service_state oneplus-websocket.service)"
     printf "TLS:     %-16b OpenVPN:  %-16b Multiplex: %b\n" \
       "$(service_state oneplus-tls.service)" "$(service_state oneplus-openvpn.service)" "$(service_state oneplus-mux.service)"
     printf "BadVPN:  %-16b SlowDNS:   %-16b Firewall: %b\n\n" \

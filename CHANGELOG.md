@@ -1,6 +1,22 @@
 # Changelog
 
-## 0.8.1
+## 0.8.2 — 2026-08-10
+
+### Correções de upgrade e organização
+- corrige a segunda falha encontrada pela integração real Ubuntu 24.04: `rsync` podia manter conteúdo antigo quando origem/destino tinham mesmo tamanho e `mtime`;
+- troca o quick-check do deploy por sincronização com `--checksum`, `--delay-updates`, `--delete-delay` e limpeza dos itens explicitamente excluídos do runtime;
+- verifica `VERSION` e arquivos críticos após a sincronização antes de continuar a instalação;
+- adiciona `lib/install_helpers.sh` para centralizar detecção de pacotes, sincronização e verificação pós-cópia;
+- adiciona `scripts/test-install-sync.sh`, reproduzindo exatamente o caso de mesmo tamanho/mesmo `mtime` que quebrou o upgrade 0.8.0 → 0.8.1;
+- evita `apt-get update/install` em reinstalações quando as dependências já estão satisfeitas e evita reinstalar Go 1.24+;
+- melhora diagnóstico do CI exibindo versão de origem, árvore instalada, launcher, SHA-256 e `stat` em divergências;
+- passa a tratar `ssh.socket` como OpenSSH ativo na interface/diagnóstico, evitando status enganoso;
+- adiciona regressão que falha o CI se o serviço vendor `sslh.service` permanecer em estado `failed`;
+- organiza o menu de atualização do Ubuntu com simulação e confirmação explícita antes de aplicar `apt-get upgrade`;
+- corrige o hardening audit-only para não criar `/run/sshd`; quando o runtime ainda não existe, ele informa a limitação sem alterar o host;
+- mantém a política de não executar `dist-upgrade/full-upgrade` nem reboot automático.
+
+## 0.8.1 — 2026-08-10
 - corrige a primeira falha encontrada pela integração real Ubuntu 24.04.4;
 - prepara `/run/sshd` de forma segura antes de validar OpenSSH em hosts com socket activation;
 - troca chamadas operacionais diretas de `sshd -t` pelo wrapper `openssh_config_test`;

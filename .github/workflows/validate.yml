@@ -7,6 +7,9 @@ on:
 permissions:
   contents: read
 
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+
 jobs:
   validate:
     runs-on: ubuntu-24.04
@@ -42,6 +45,9 @@ jobs:
 
       - name: Integration safety contract tests
         run: bash scripts/test-integration-contract.sh
+
+      - name: Installer content-sync regression tests
+        run: bash scripts/test-install-sync.sh
 
       - name: Signed release archive security tests
         run: python3 scripts/test-release.py

@@ -62,7 +62,7 @@
 - [ ] convivência com UFW/firewall do provedor
 - [ ] criar backup age em uma VPS e restaurar em VPS limpa
 - [ ] configurar chave minisign offline e validar upgrade por GitHub Release assinada
-- [ ] publicar a primeira release assinada (candidata v0.8.1) e validar upgrade por GitHub Release
+- [ ] publicar a primeira release assinada após integração verde (candidata v0.8.2+) e validar upgrade por GitHub Release
 - [ ] validar `oneplus update --check` contra a primeira release assinada publicada
 - [ ] validar `oneplus update --latest` com rollback em uma VPS de teste
 - [ ] validar rotação completa OpenVPN atual -> próxima CA com clientes Android/Windows durante a fase dual
@@ -71,7 +71,9 @@
 - [ ] executar hardening audit-only em VPS de produção e revisar falsos positivos
 - [x] primeira execução real v0.8.0 chegou ao instalador em Ubuntu 24.04.4 e revelou `/run/sshd` ausente sob socket activation
 - [x] v0.8.1 corrige runtime OpenSSH, isolamento do `sslh.service` recém-instalado e staging de artifacts root-only
-- [ ] confirmar workflow `Integration Ubuntu 24.04 VM` verde na `main`
+- [x] segunda execução real (v0.8.1) ultrapassou a instalação da base e revelou o quick-check size+mtime do `rsync`, mantendo `VERSION` 0.8.0 após o upgrade
+- [x] v0.8.2 troca deploy por checksum, adiciona regressão de mesmo tamanho/mtime, otimiza dependências e melhora diagnóstico do upgrade
+- [ ] confirmar workflow `Integration Ubuntu 24.04 VM` verde com v0.8.2 na `main`
 - [ ] executar `integration-ubuntu.sh --ci` em VPS descartável fora do GitHub
 - [ ] armar `--arm-reboot`, reiniciar a VPS descartável e confirmar `post-reboot.result=PASS`
 

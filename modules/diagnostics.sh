@@ -11,6 +11,13 @@ diag_cmd() {
   if "$@" >/dev/null 2>&1; then diag_ok "$label"; else diag_fail "$label"; fi
 }
 
+oneplus_version_consistent() {
+  local tree_version launcher_version
+  tree_version=$(tr -d '[:space:]' < /opt/oneplus/VERSION 2>/dev/null || true)
+  launcher_version=$(/usr/local/bin/oneplus --version 2>/dev/null | awk '{print $2}' || true)
+  [[ -n "$tree_version" && "$tree_version" == "$launcher_version" ]]
+}
+
 file_mode_at_most_600() {
   local f="$1" mode
   [[ -f "$f" ]] || return 0
@@ -24,6 +31,7 @@ diagnostics_run() {
   diag_cmd "Ubuntu suportado" check_supported_os
   diag_cmd "OpenSSH válido" openssh_config_test
   diag_cmd "Launcher OnePlus" bash -c '[[ "$(readlink -f /usr/local/bin/oneplus 2>/dev/null)" == /opt/oneplus/bin/oneplus ]]'
+  diag_cmd "Versão da árvore/launcher consistente" oneplus_version_consistent
   diag_cmd "Timer de usuários habilitado" systemctl is-enabled oneplus-user-maintenance.timer
   diag_cmd "Timer PKI OpenVPN habilitado" systemctl is-enabled oneplus-openvpn-pki-maintenance.timer
   diag_cmd "BadVPN íntegro" sha256sum -c /var/lib/oneplus/badvpn.sha256
@@ -78,6 +86,9 @@ diagnostics_run() {
   else
     diag_ok "Nenhuma unidade OnePlus em failed"
   fi
+  if systemctl is-failed --quiet sslh.service 2>/dev/null; then
+    diag_warn "sslh.service vendor está em failed; o OnePlus usa oneplus-mux.service. Preserve configurações externas e revise o serviço vendor separadamente."
+  fi
 
   if systemctl is-active --quiet oneplus-firewall.service 2>/dev/null; then
     diag_cmd "Tabela NAT OnePlus carregada" nft list table ip oneplus_nat
@@ -97,7 +108,8 @@ diagnostics_run() {
   fi
 
   printf "\nServiços:\n"
-  for unit in ssh.service oneplus-dropbear.service oneplus-websocket.service oneplus-tls.service oneplus-openvpn.service oneplus-mux.service oneplus-firewall.service oneplus-badvpn.service oneplus-slowdns.service oneplus-user-maintenance.timer oneplus-openvpn-pki-maintenance.timer oneplus-history.timer; do
+  printf "  %-34s %b\n" "OpenSSH (service/socket)" "$(openssh_service_state)"
+  for unit in oneplus-dropbear.service oneplus-websocket.service oneplus-tls.service oneplus-openvpn.service oneplus-mux.service oneplus-firewall.service oneplus-badvpn.service oneplus-slowdns.service oneplus-user-maintenance.timer oneplus-openvpn-pki-maintenance.timer oneplus-history.timer; do
     printf "  %-34s %b\n" "$unit" "$(service_state "$unit")"
   done
 

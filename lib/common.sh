@@ -57,6 +57,20 @@ service_state() {
   fi
 }
 
+openssh_service_state() {
+  if systemctl is-active --quiet ssh.service 2>/dev/null; then
+    printf "%bATIVO%b" "$C_GREEN" "$C_RESET"
+  elif systemctl is-active --quiet ssh.socket 2>/dev/null; then
+    printf "%bATIVO (socket)%b" "$C_GREEN" "$C_RESET"
+  elif systemctl is-enabled --quiet ssh.service 2>/dev/null; then
+    printf "%bINATIVO%b" "$C_YELLOW" "$C_RESET"
+  elif systemctl is-enabled --quiet ssh.socket 2>/dev/null; then
+    printf "%bINATIVO (socket)%b" "$C_YELLOW" "$C_RESET"
+  else
+    printf "%bNÃO CONFIGURADO%b" "$C_RED" "$C_RESET"
+  fi
+}
+
 primary_ipv4() {
   ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") {print $(i+1); exit}}'
 }

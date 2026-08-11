@@ -14,7 +14,7 @@ Ela existe para VM/VPS descartável. **Não execute na VPS de produção.**
 4. caso contrário, faz instalação limpa;
 5. repete a instalação atual para testar idempotência;
 6. verifica preservação de `/etc/oneplus`;
-7. executa `oneplus --check` e `sshd -t`;
+7. executa `oneplus --check` e a validação OpenSSH usada pelo produto (`openssh_config_test`);
 8. inicia e testa Dropbear, WebSocket, TLS/Stunnel, BadVPN, SlowDNS e sslh em loopback/portas altas;
 9. testa OpenVPN quando `/dev/net/tun` estiver disponível;
 10. grava um snapshot real do histórico;
@@ -98,4 +98,15 @@ CI reduz regressões; não substitui homologação em uma VPS descartável com c
 
 ## Compatibilidade com OpenSSH socket activation
 
-Em imagens Ubuntu 24.04 onde `ssh.socket` está escutando mas `ssh.service` ainda não iniciou, `/run/sshd` pode não existir. A integração cria somente esse diretório runtime efêmero (`root:root`, `0755`) antes de `sshd -t`. O instalador v0.8.1 faz a mesma preparação e rejeita symlink ou objeto não-diretório nesse caminho.
+Em imagens Ubuntu 24.04 onde `ssh.socket` está escutando mas `ssh.service` ainda não iniciou, `/run/sshd` pode não existir. A integração cria somente esse diretório runtime efêmero (`root:root`, `0755`) antes de `sshd -t`. O instalador v0.8.1+ faz a mesma preparação e rejeita symlink ou objeto não-diretório nesse caminho.
+
+## Falhas reais já encontradas pelo CI
+
+A suíte já encontrou duas regressões que os testes estáticos não capturavam:
+
+1. **v0.8.0:** em Ubuntu 24.04 com `ssh.socket`, `/run/sshd` ainda não existia e `sshd -t` falhava. A v0.8.1 passou a preparar o runtime efêmero de forma segura.
+2. **v0.8.1:** o upgrade 0.8.0 → 0.8.1 concluía o instalador, mas `/opt/oneplus/VERSION` continuava em 0.8.0. Origem e destino tinham o mesmo tamanho e o mesmo `mtime`, então o quick-check padrão do `rsync` considerou o arquivo inalterado.
+
+A v0.8.2 corrige o segundo caso com sincronização por conteúdo (`rsync --checksum`), atualização/exclusão atrasadas e verificação pós-cópia dos arquivos críticos. `scripts/test-install-sync.sh` reproduz propositalmente arquivos diferentes com **mesmo tamanho e mesmo timestamp** para impedir regressão futura.
+
+A integração também falha se o `sslh.service` do pacote Ubuntu permanecer em estado `failed`; o OnePlus usa exclusivamente `oneplus-mux.service` quando ele próprio instala o pacote.

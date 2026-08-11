@@ -8,8 +8,8 @@ fail() { printf '[ERRO] %s\n' "$*" >&2; FAILED=1; }
 ok()   { printf '[OK] %s\n' "$*"; }
 
 required=(
-  VERSION README.md CHANGELOG.md docs/RELEASES.md docs/OPENVPN-PKI-ROTATION.md docs/HARDENING.md release/README.md setup.sh install.sh uninstall.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-operations.sh scripts/test-release.py scripts/test-update-metadata.py scripts/test-history.py scripts/test-hardening.sh scripts/fix-permissions.sh scripts/git-fix-modes.sh scripts/release-keygen.sh scripts/release-prepare.sh scripts/release-sign.sh
-  bin/oneplus lib/common.sh lib/os.sh
+  VERSION README.md CHANGELOG.md docs/RELEASES.md docs/OPENVPN-PKI-ROTATION.md docs/HARDENING.md release/README.md setup.sh install.sh uninstall.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-operations.sh scripts/test-release.py scripts/test-update-metadata.py scripts/test-history.py scripts/test-hardening.sh scripts/test-install-sync.sh scripts/fix-permissions.sh scripts/git-fix-modes.sh scripts/release-keygen.sh scripts/release-prepare.sh scripts/release-sign.sh
+  bin/oneplus lib/common.sh lib/os.sh lib/install_helpers.sh
   modules/system.sh modules/ssh.sh modules/dropbear.sh modules/websocket.sh modules/tls.sh modules/openvpn.sh modules/mux.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh modules/firewall.sh modules/backup.sh modules/reports.sh modules/diagnostics.sh modules/update.sh modules/history.sh modules/hardening.sh
   libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-openvpn-pki-maintenance libexec/run-mux libexec/run-firewall libexec/run-history libexec/websocket_proxy.py libexec/openvpn_manager.py libexec/openvpn_bind_identity.py libexec/release_verify.py libexec/github_release.py libexec/history_snapshot.py libexec/history_summary.py
   defaults/oneplus.conf defaults/badvpn.env defaults/slowdns.env defaults/users.conf defaults/dropbear.env defaults/websocket.env defaults/tls.env defaults/openvpn.env defaults/mux.env defaults/firewall.env defaults/history.env
@@ -45,10 +45,10 @@ for f in "${shell_files[@]}"; do
 done
 (( FAILED == 0 )) && ok "Sintaxe Bash e finais de linha validados."
 
-executables=(setup.sh install.sh uninstall.sh bin/oneplus lib/common.sh lib/os.sh \
+executables=(setup.sh install.sh uninstall.sh bin/oneplus lib/common.sh lib/os.sh lib/install_helpers.sh \
   modules/system.sh modules/ssh.sh modules/dropbear.sh modules/websocket.sh modules/tls.sh modules/openvpn.sh modules/mux.sh modules/badvpn.sh modules/slowdns.sh modules/users.sh modules/firewall.sh modules/backup.sh modules/reports.sh modules/diagnostics.sh modules/update.sh modules/history.sh modules/hardening.sh \
   libexec/run-badvpn libexec/run-slowdns libexec/run-user-maintenance libexec/run-dropbear libexec/run-websocket libexec/run-tls libexec/run-openvpn libexec/run-openvpn-pki-maintenance libexec/run-mux libexec/run-firewall libexec/run-history libexec/websocket_proxy.py libexec/openvpn_manager.py libexec/openvpn_bind_identity.py libexec/release_verify.py libexec/github_release.py libexec/history_snapshot.py libexec/history_summary.py \
-  scripts/validate.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-operations.sh scripts/test-release.py scripts/test-update-metadata.py scripts/test-history.py scripts/test-hardening.sh scripts/fix-permissions.sh scripts/git-fix-modes.sh scripts/release-keygen.sh scripts/release-prepare.sh scripts/release-sign.sh scripts/test-websocket.py scripts/test-update-metadata.py)
+  scripts/validate.sh scripts/test-users.sh scripts/test-openvpn.sh scripts/test-mux.sh scripts/test-operations.sh scripts/test-release.py scripts/test-update-metadata.py scripts/test-history.py scripts/test-hardening.sh scripts/test-install-sync.sh scripts/fix-permissions.sh scripts/git-fix-modes.sh scripts/release-keygen.sh scripts/release-prepare.sh scripts/release-sign.sh scripts/test-websocket.py)
 for rel in "${executables[@]}"; do
   [[ -x "$ROOT_DIR/$rel" ]] || fail "Permissão executável ausente: $rel"
 done
@@ -405,6 +405,9 @@ if ! grep -Fq 'Modo: AUDIT-ONLY' "$ROOT_DIR/modules/hardening.sh" || \
    ! grep -Fq 'Nenhuma alteração foi aplicada.' "$ROOT_DIR/modules/hardening.sh"; then
   fail "Módulo hardening deve declarar e preservar modo audit-only."
 fi
+if grep -Eq '^[[:space:]]*openssh_config_test([[:space:]]|$)' "$ROOT_DIR/modules/hardening.sh"; then
+  fail "Hardening audit-only não pode chamar helper OpenSSH que cria runtime efêmero."
+fi
 if grep -Eq '^[[:space:]]*(sudo[[:space:]]+)?(apt|apt-get)[[:space:]].*(install|upgrade|dist-upgrade)|^[[:space:]]*systemctl[[:space:]]+(start|stop|restart|enable|disable|mask|unmask)|^[[:space:]]*nft[[:space:]]+(add|delete|flush)|^[[:space:]]*sysctl[[:space:]]+-w' "$ROOT_DIR/modules/hardening.sh"; then
   fail "Hardening audit-only contém primitiva mutável proibida."
 else
@@ -414,6 +417,24 @@ if ! grep -Fq 'oneplus history' "$ROOT_DIR/bin/oneplus" || ! grep -Fq 'oneplus h
   fail "CLI de histórico/hardening ausente."
 fi
 
+
+# Upgrade/runtime: sincronização deve comparar conteúdo, não apenas size+mtime.
+if ! grep -Fq 'rsync -a --checksum --delay-updates --delete-delay --delete-excluded' "$ROOT_DIR/lib/install_helpers.sh" || \
+   ! grep -Fq 'oneplus_sync_tree "$SELF_DIR" /opt/oneplus' "$ROOT_DIR/install.sh" || \
+   ! grep -Fq 'oneplus_verify_synced_core "$SELF_DIR" /opt/oneplus' "$ROOT_DIR/install.sh"; then
+  fail "Instalador não usa sincronização por conteúdo + verificação pós-cópia."
+else
+  ok "Sincronização de upgrade usa checksum, atualização atrasada e verificação pós-cópia."
+fi
+if grep -Fq 'rsync -a --delete ' "$ROOT_DIR/install.sh"; then
+  fail "Instalador voltou a usar rsync quick-check sem checksum."
+fi
+if ! grep -Fq 'Digite ATUALIZAR para aplicar' "$ROOT_DIR/modules/system.sh" || \
+   ! grep -Fq 'apt-get -s upgrade' "$ROOT_DIR/modules/system.sh"; then
+  fail "Upgrade do Ubuntu precisa de prévia e confirmação explícita."
+else
+  ok "Upgrade de pacotes do Ubuntu exige simulação e confirmação explícita."
+fi
 
 # Fase 6: integração real em VM Ubuntu 24.04, com guarda contra produção.
 if [[ ! -r "$ROOT_DIR/scripts/integration-ubuntu.sh" || ! -r "$ROOT_DIR/.github/workflows/integration-ubuntu.yml" || ! -r "$ROOT_DIR/docs/INTEGRATION-TESTS.md" ]]; then
@@ -447,7 +468,7 @@ else
 
 grep -Fq 'openssh_config_test()' "$ROOT_DIR/lib/common.sh" || fail "wrapper seguro de validação OpenSSH ausente"
 grep -Fq 'ensure_openssh_runtime_dir' "$ROOT_DIR/install.sh" || fail "instalador não prepara runtime OpenSSH"
-grep -Fq 'SSHL_WAS_INSTALLED' "$ROOT_DIR/install.sh" || fail "instalador não isola serviço vendor sslh recém-instalado"
+grep -Fq 'SSLH_WAS_INSTALLED' "$ROOT_DIR/install.sh" || fail "instalador não isola serviço vendor sslh recém-instalado"
 ok "Compatibilidade OpenSSH socket-activation e isolamento do sslh vendor validados."
 fi
 

@@ -16,5 +16,10 @@ grep -Fq 'PermitRootLogin=yes' "$ROOT_DIR/modules/hardening.sh"
 grep -Fq 'unattended-upgrades' "$ROOT_DIR/modules/hardening.sh"
 grep -Fq 'AppArmor' "$ROOT_DIR/modules/hardening.sh"
 grep -Fq 'PasswordAuthentication' "$ROOT_DIR/modules/hardening.sh"
+if grep -Eq '^[[:space:]]*openssh_config_test([[:space:]]|$)' "$ROOT_DIR/modules/hardening.sh"; then
+  echo '[ERRO] hardening audit-only não pode chamar helper que cria /run/sshd' >&2
+  exit 1
+fi
+grep -Fq 'Missing privilege separation directory' "$ROOT_DIR/modules/hardening.sh"
 
 echo "HARDENING TESTS: OK"
